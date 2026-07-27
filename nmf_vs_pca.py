@@ -5,7 +5,7 @@ nmf_vs_pca.py — Does non-negative matrix factorisation recover a cyclic latent
 
 WHY THIS TEST EXISTS
 --------------------
-Prof. R. C. Contreras observed that wearable signals are non-negative and suggested
+ observed that wearable signals are non-negative and suggested
 NMF may therefore suit the latent-space extraction better than PCA.
 
 The observation is correct about the RAW signals. But two things need testing:
