@@ -14,29 +14,33 @@ therefore NOT redistributed with this package. To reproduce:
 WHAT THIS REPRODUCES (manuscript section -> function)
 -----------------------------------------------------
   7.1  describe()                 sample, ordinal levels, effective paired density
-  7.2  instrument_ssf()           SSF of predictor, outcomes, and wearables (Table 7)
-  7.6  differential_prediction()  the preregistered differential prediction (Table 9)
+  7.2  instrument_ssf()           SSF of predictor, outcomes, and wearables (Table 8)
+  7.6  differential_prediction()  the preregistered differential prediction (Table 11)
   7.6  disattenuate()             disattenuated group effects + person-level bootstrap
-                                  (Table 10 -- shows the prediction CANNOT be tested)
+                                  (Table 12 -- shows the prediction CANNOT be tested)
   7.6  phase_locked()             cycle PHASE vs hormone LEVEL (Figure 4)
   7.7  modelfree_bound()          observed SD(r_i) vs its own phase-randomised null
-  7.8  objective_vs_selfreport()  wearable vs self-report (Table 13)
+  7.8  objective_vs_selfreport()  wearable vs self-report (Table 14)
 
 NOTE ON THE ORDINAL MAP
 -----------------------
 The self-report scale has SIX levels. An early version of this analysis used a
 five-level map that omitted "Not at all", silently discarding valid data and
 producing N=39/median 74 instead of the correct N=41/median 85. The six-level map
-below is the correct one.
+below is the correct one. Categories outside the map are mapped to NaN and dropped;
+verify with sorted(df[item].dropna().unique()) that the map is exhaustive.
 
-NOTE ON SSF vs PAIRING (7.8)
-----------------------------
-SSF is a property of the OUTCOME instrument and must be computed on the COMPLETE,
-regularly spaced outcome series. It must NOT be computed on the estrogen-paired
-subset: dropping days on which E3G is missing punches holes into the series, and the
-spectral SSF estimator is a periodogram that assumes regular spacing. Coupling, by
-contrast, requires pairing. The two estimands therefore use two different series;
-objective_vs_selfreport() keeps them separate.
+NOTE ON SSF, GAPS, AND PAIRING
+------------------------------
+SSF is a property of the OUTCOME (or predictor) instrument. It must be computed on the
+COMPLETE series, on a REGULAR grid, and NOT on any subset conditioned on the other
+variable's availability (which would punch holes into the series; the spectral
+estimator is a periodogram and assumes regular spacing). Every SSF computation here
+wraps the raw values with ssf_estimators.regular_grid(values, day_index), which
+reindexes onto the contiguous daily grid and inserts NaN at missing days so that the
+estimator's on_gap='longest' policy acts on genuine gaps rather than silently
+compacting them. Coupling, by contrast, requires pairing and legitimately uses
+paired_series(); the two estimands never share a series.
 """
 import argparse
 import warnings
@@ -44,7 +48,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from ssf_estimators import ssf_spectral, ssf_ar1, ssf_acf_linear
+from ssf_estimators import ssf_spectral, ssf_ar1, ssf_acf_linear, regular_grid
 
 warnings.filterwarnings("ignore")
 
@@ -83,7 +87,9 @@ def corr(a, b):
 
 
 def hedges_g(r):
-    """Convert a correlation to the Hedges' g scale used by the meta-analysis."""
+    """Convert a correlation to the Cohen's d scale used by the meta-analysis
+    (d = 2r / sqrt(1 - r^2)). NB: this is d, WITHOUT the small-sample Hedges J
+    correction; the name is retained for continuity with earlier drafts."""
     r = np.clip(r, -0.99, 0.99)
     return abs(2 * r / np.sqrt(1 - r ** 2))
 
@@ -104,7 +110,8 @@ def phase_randomize(x, rng):
 
 
 def paired_series(df, item, min_n=MIN_PAIRED):
-    """List of (estrogen, outcome) arrays, one per qualifying participant."""
+    """List of (estrogen, outcome) arrays, one per qualifying participant. For COUPLING
+    only -- pairing is required to correlate the two. Never use these for SSF."""
     d = df.dropna(subset=["estrogen", item]).copy()
     d["y"] = d[item].map(ORDINAL)
     d = d.dropna(subset=["y"])
@@ -133,7 +140,7 @@ def describe(df):
 # ------------------------------- 7.2 ------------------------------- #
 def instrument_ssf(df, data_dir):
     print("\n" + "=" * 74)
-    print("7.2  INSTRUMENT QUALITY (Table 7)")
+    print("7.2  INSTRUMENT QUALITY (Table 8)")
     print("=" * 74)
     print(f"{'measure':>34} {'AR(1)':>9} {'ACF-lin':>9} {'SPECTRAL':>10}")
     print("-" * 66)
@@ -143,7 +150,7 @@ def instrument_ssf(df, data_dir):
         est = {k: [] for k in ("ar1", "lin", "spec")}
         for y in series_by_person:
             for k, f in (("ar1", ssf_ar1), ("lin", ssf_acf_linear), ("spec", ssf_spectral)):
-                v = f(y)
+                v = f(y)                                    # on_gap='longest' by default
                 if np.isfinite(v):
                     est[k].append(v)
         a, l, s = (np.median(est[k]) if est[k] else np.nan for k in ("ar1", "lin", "spec"))
@@ -152,20 +159,26 @@ def instrument_ssf(df, data_dir):
         rows.append(dict(measure=label, ar1=a, acf_linear=l, spectral=s))
         return s
 
+    # predictor and self-report outcomes: complete series on a regular grid
     report("estrone-3-glucuronide (PREDICTOR)",
-           [g.estrogen.values for _, g in df.groupby("id")])
+           [regular_grid(g.estrogen.values, g.day_in_study.values)
+            for _, g in df.groupby("id")])
     for item in ("fatigue", "moodswing", "cramps", "bloating", "stress"):
         report(f"{item} [{CLASSIFICATION.get(item,'')}]",
-               [g[item].map(ORDINAL).values for _, g in df.groupby("id")])
+               [regular_grid(g[item].map(ORDINAL).values, g.day_in_study.values)
+                for _, g in df.groupby("id")])
 
     # objective wearables
     try:
         rhr = pd.read_csv(f"{data_dir}/resting_heart_rate.csv").sort_values(["id", "day_in_study"])
-        report("resting heart rate (OBJECTIVE)", [g.value.values for _, g in rhr.groupby("id")])
+        report("resting heart rate (OBJECTIVE)",
+               [regular_grid(g.value.values, g.day_in_study.values)
+                for _, g in rhr.groupby("id")])
         ct = pd.read_csv(f"{data_dir}/computed_temperature.csv")
         ct = ct[ct.type == "SKIN"].sort_values(["id", "sleep_start_day_in_study"])
         report("nightly skin temperature (OBJECTIVE)",
-               [g.nightly_temperature.values for _, g in ct.groupby("id")])
+               [regular_grid(g.nightly_temperature.values, g.sleep_start_day_in_study.values)
+                for _, g in ct.groupby("id")])
     except FileNotFoundError:
         print("  [wearable files not found; skipping objective measures]")
 
@@ -179,9 +192,9 @@ def instrument_ssf(df, data_dir):
 
 
 # ------------------------------- 7.6a ------------------------------- #
-def differential_prediction(df, rng, B=300):
+def differential_prediction(df, rng):
     print("\n" + "=" * 74)
-    print("7.6  THE PREREGISTERED DIFFERENTIAL PREDICTION (Table 9)")
+    print("7.6  THE PREREGISTERED DIFFERENTIAL PREDICTION (Table 11)")
     print("     BALANCED -> group null ;  DIRECTIONAL -> group effect LEAKS (|g| >= .10)")
     print("=" * 74)
     print(f"{'outcome':>14} {'class':>26} {'|g| obs':>8} {'predicted':>10} {'OBSERVED':>10}")
@@ -191,6 +204,9 @@ def differential_prediction(df, rng, B=300):
         per = paired_series(df, item)
         if len(per) < 10:
             continue
+        # NOTE (audit ID-E1): this pooled correlation mixes within- and between-person
+        # variance and is not the mean of individual couplings the GH targets. Retained
+        # pending a decision on the estimand; see the audit report (options A/B).
         X = np.concatenate([x for x, _ in per])
         Y = np.concatenate([y for _, y in per])
         g = hedges_g(corr(X, Y))
@@ -217,12 +233,18 @@ def disattenuate(df, rng, n_boot=2000):
     CONCLUSION: the differential prediction CANNOT BE TESTED with these instruments.
     Not "it failed" -- it cannot be evaluated. This is the third instance of the
     manuscript's own thesis applying to the manuscript.
+
+    SSF NOTE: both sx (predictor) and sy (outcome) are computed on the COMPLETE series
+    on a regular grid -- NOT on the estrogen-paired subset used for the correlation.
     """
     print("\n" + "=" * 74)
-    print("7.6  DISATTENUATED GROUP EFFECTS + PERSON-LEVEL BOOTSTRAP (Table 10)")
+    print("7.6  DISATTENUATED GROUP EFFECTS + PERSON-LEVEL BOOTSTRAP (Table 12)")
     print("=" * 74)
+    # predictor SSF: complete estrogen series, regular grid, all persons
     sx = np.median([v for _, g in df.groupby("id")
-                    for v in [ssf_spectral(g.estrogen.values)] if np.isfinite(v)])
+                    for v in [ssf_spectral(regular_grid(g.estrogen.values,
+                                                        g.day_in_study.values))]
+                    if np.isfinite(v)])
     print(f"  SSF predictor (E3G) = {sx:.3f}\n")
     print(f"{'outcome':>14} {'class':>13} {'atten':>7} {'|g| obs':>8} {'|g| disatt':>11} "
           f"{'95% CI':>18} {'classifiable?':>14}")
@@ -231,8 +253,12 @@ def disattenuate(df, rng, n_boot=2000):
     for item, cls in CLASSIFICATION.items():
         if not (cls.startswith("BALANCED") or cls.startswith("DIRECTIONAL")):
             continue
-        per = paired_series(df, item)
-        sy = np.median([v for _, y in per for v in [ssf_spectral(y)] if np.isfinite(v)])
+        per = paired_series(df, item)                       # COUPLING series (paired)
+        # outcome SSF on the COMPLETE series (regular grid), NOT the paired subset
+        sy = np.median([v for _, g in df.groupby("id")
+                        for v in [ssf_spectral(regular_grid(g[item].map(ORDINAL).values,
+                                                            g.day_in_study.values))]
+                        if np.isfinite(v)])
         att = np.sqrt(sx * sy)
         X = np.concatenate([x for x, _ in per]); Y = np.concatenate([y for _, y in per])
         g_obs = hedges_g(corr(X, Y))
@@ -312,34 +338,19 @@ def modelfree_bound(df, rng, item="fatigue", B=500):
                 SD_null_median=float(np.median(S_null)), p=p)
 
 
-# ------------------------------- 7.8 (CORRECTED) ------------------------------- #
+# ------------------------------- 7.8 ------------------------------- #
 def objective_vs_selfreport(df, data_dir, rng, B=300):
     """Test the manuscript's own prescription inside the dataset: same participants,
     same days, same predictor, same registered test -- but an OBJECTIVE outcome.
 
-    TWO ESTIMANDS, TWO SERIES (this is the corrected logic):
-      * COUPLING  (SD(r_i) + phase-randomised registered test) is estimated on the
-        PAIRED (estrogen, outcome) series. Pairing is required to correlate the two,
-        so dropna on both is correct here.
-      * SSF (spectral) is estimated on the COMPLETE per-person OUTCOME series, loaded
-        from its own source and NOT conditioned on E3G availability. Dropping outcome
-        days on which estrogen is missing punches holes into the series, and the
-        spectral SSF estimator is a periodogram that assumes REGULAR spacing, so the
-        estrogen-gapped series makes it INVALID. Computing SSF on the estrogen-paired
-        subset is exactly what produced the retracted 0.772 / 0.574 values; the
-        complete-series computation below reproduces the corrected 0.474 (RHR) and
-        0.336 (skin temp) of Table 14, and is identical to how instrument_ssf() (7.2)
-        computes these -- so the two functions can never again disagree.
-
-    NOTE (regular-spacing assumption, declared): the complete daily series is treated
-    as evenly spaced, the same assumption the manuscript makes. Fitbit RHR/temp have
-    near-complete daily coverage. Where a wearable carries material internal day-gaps,
-    the rigorous variant is the longest contiguous gap-free stretch (the actigraphy
-    method, 7.9) or a Lomb-Scargle periodogram. This function does NOT interpolate:
-    gap-filling injects artificial smoothness and would bias SSF UPWARD.
+    TWO ESTIMANDS, TWO SERIES:
+      * COUPLING  (SD(r_i) + phase-randomised registered test) -> PAIRED (estrogen,
+        outcome) series (dropna on both is correct here).
+      * SSF (spectral) -> COMPLETE per-person OUTCOME series on a REGULAR grid
+        (regular_grid), NOT conditioned on E3G availability.
     """
     print("\n" + "=" * 74)
-    print("7.8  OBJECTIVE vs SELF-REPORT (Table 13) -- EXPLORATORY")
+    print("7.8  OBJECTIVE vs SELF-REPORT (Table 14) -- EXPLORATORY")
     print("=" * 74)
 
     rhr = pd.read_csv(f"{data_dir}/resting_heart_rate.csv")[["id", "day_in_study", "value"]] \
@@ -355,14 +366,16 @@ def objective_vs_selfreport(df, data_dir, rng, B=300):
         .merge(rhr, on=["id", "day_in_study"], how="left") \
         .merge(ct,  on=["id", "day_in_study"], how="left")
 
-    # --- complete per-person OUTCOME series: for SSF only (NOT estrogen-conditioned) ---
-    # Built exactly as instrument_ssf() (7.2) builds them.
+    # --- complete per-person OUTCOME series on a REGULAR grid: for SSF only ---
     complete = {
-        "fatigue_n": {pid: g.sort_values("day_in_study").fatigue.map(ORDINAL).values
+        "fatigue_n": {pid: regular_grid(g.sort_values("day_in_study").fatigue.map(ORDINAL).values,
+                                        g.sort_values("day_in_study").day_in_study.values)
                       for pid, g in df.groupby("id")},
-        "rhr":       {pid: g.sort_values("day_in_study").rhr.values
+        "rhr":       {pid: regular_grid(g.sort_values("day_in_study").rhr.values,
+                                        g.sort_values("day_in_study").day_in_study.values)
                       for pid, g in rhr.groupby("id")},
-        "temp":      {pid: g.sort_values("day_in_study").temp.values
+        "temp":      {pid: regular_grid(g.sort_values("day_in_study").temp.values,
+                                        g.sort_values("day_in_study").day_in_study.values)
                       for pid, g in ct.groupby("id")},
     }
 
@@ -380,10 +393,10 @@ def objective_vs_selfreport(df, data_dir, rng, B=300):
                 # COUPLING: paired series (estrogen aligned with outcome)
                 per.append((gg.estrogen.values.astype(float),
                             gg[col].values.astype(float)))
-                # SSF: this SAME participant's COMPLETE outcome series (no E3G gaps)
+                # SSF: this SAME participant's COMPLETE, regular-grid outcome series
                 y_full = complete[col].get(pid)
-                if y_full is not None and len(y_full) >= MIN_PAIRED:
-                    v = ssf_spectral(np.asarray(y_full, dtype=float))
+                if y_full is not None:
+                    v = ssf_spectral(y_full)               # on_gap='longest'
                     if np.isfinite(v):
                         ss.append(v)
         if len(per) < 10:
@@ -434,15 +447,15 @@ def main():
     df = load(args.data_dir)
 
     describe(df)
-    instrument_ssf(df, args.data_dir).to_csv(f"{args.out_dir}/table07_instrument_ssf.csv", index=False)
-    differential_prediction(df, rng).to_csv(f"{args.out_dir}/table09_differential.csv", index=False)
-    disattenuate(df, rng).to_csv(f"{args.out_dir}/table10_disattenuated.csv", index=False)
+    instrument_ssf(df, args.data_dir).to_csv(f"{args.out_dir}/table08_instrument_ssf.csv", index=False)
+    differential_prediction(df, rng).to_csv(f"{args.out_dir}/table11_differential.csv", index=False)
+    disattenuate(df, rng).to_csv(f"{args.out_dir}/table12_disattenuated.csv", index=False)
     phase_locked(df).to_csv(f"{args.out_dir}/fig04_phase_locked.csv", index=False)
     pd.DataFrame([modelfree_bound(df, rng, "fatigue"),
                   modelfree_bound(df, rng, "moodswing")]).to_csv(
                       f"{args.out_dir}/modelfree_bound.csv", index=False)
     objective_vs_selfreport(df, args.data_dir, rng).to_csv(
-        f"{args.out_dir}/table13_objective.csv", index=False)
+        f"{args.out_dir}/table14_objective.csv", index=False)
     print(f"\n[saved] {args.out_dir}/")
 
 
