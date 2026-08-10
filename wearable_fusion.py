@@ -10,8 +10,6 @@ Current best instrument: at-home urinary estrone-3-glucuronide (E3G), SSF ~ 0.47
 Because attenuation is MULTIPLICATIVE -- r_obs = r_true * sqrt(SSF_x * SSF_y) -- a weak
 predictor caps the observable coupling no matter how good the outcome measure is.
 
-
-----------------------------------------------
   "You used only one PCA component? Why not use more, until you capture ~95% of variance?"
 
 Answered in section (2) below. Short version: it makes things WORSE, because NOISE IS
@@ -31,6 +29,15 @@ When I require a CONTIGUOUS, gap-free segment with all six signals present:  **N
 => The wearable-fusion question CANNOT BE ANSWERED with this open dataset. Not for lack of
    method -- for lack of data with continuous coverage. That, I believe, is the real result.
 
+GAP HANDLING (consistency with the rest of the package)
+-------------------------------------------------------
+Every SSF computation on real data now routes through ssf_estimators.regular_grid(values,
+day_index), which places the series on the contiguous day grid (NaN at holes) so the
+estimator's on_gap='longest' policy acts on genuine gaps instead of silently compacting
+them. The ONLY place that deliberately feeds a gap-FILLED series to the estimator is the
+interpolation-bias audit (section 3), whose entire purpose is to MEASURE the inflation
+that interpolation causes -- that path is intentionally left as-is.
+
 DATA
 ----
 mcPHASES (PhysioNet, DOI 10.13026/zx6a-2c81). CREDENTIALED ACCESS -- not redistributed.
@@ -47,7 +54,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from ssf_estimators import ssf_spectral
+from ssf_estimators import ssf_spectral, regular_grid
 
 warnings.filterwarnings("ignore")
 
@@ -97,20 +104,25 @@ def pc_scores(X):
     return Zc @ Vt.T, (S ** 2) / np.sum(S ** 2)
 
 
+def _ssf_on_grid(values, days):
+    """SSF on a REGULAR day grid: expose missing-row gaps as NaN, then let the estimator
+    take the longest contiguous run. This is the package-wide gap discipline."""
+    return ssf_spectral(regular_grid(np.asarray(values, float), np.asarray(days)))
+
+
 # ------------------------------- (1) + (2) ------------------------------- #
 def components_analysis(M):
     """Does adding PCA components help? (Prof. Contreras's question.)
 
-    *** THE ANSWER IS: THIS DATASET CANNOT TELL US. ***
+    I ran it under four defensible preprocessing choices. The disagreement across them is
+    REPORTED, not asserted: after gap-correct SSF (regular_grid), residual disagreement
+    reflects genuine DATA SELECTION differences between the cleaning rules, not the FFT
+    gap artefact.
 
-    I ran it under four defensible preprocessing choices. They DISAGREE -- one even
-    reverses the sign of the trend. The reason is section (3): the wearable series are
-    gapped, every cleaning choice leaves or creates a different gap structure, and the FFT
-    treats non-consecutive days as consecutive.
-
-    An answer that flips with an arbitrary preprocessing choice is not an answer. I am
-    reporting the disagreement rather than picking the run I like, because picking would
-    be the mistake.
+    CAVEAT (audit ID-PCsum): ssf_spectral(sc[:, :k].sum(axis=1)) sums PCA scores whose
+    signs are arbitrary per subject; the sum is therefore a sign-ambiguous linear
+    combination. Retained here to answer the question as posed, but note that part of any
+    residual instability is intrinsic to this construction, not to the data.
     """
     print("=" * 72)
     print("(2)  DOES ADDING PCA COMPONENTS HELP?  -- ROBUSTNESS TO PREPROCESSING")
@@ -123,8 +135,9 @@ def components_analysis(M):
             if gg is None or len(gg) < 40:
                 continue
             sc, _ = pc_scores(gg[SIGNALS].astype(float).values)
+            days = gg["day"].values
             for k in range(1, 7):
-                v = ssf_spectral(sc[:, :k].sum(axis=1))
+                v = _ssf_on_grid(sc[:, :k].sum(axis=1), days)   # gap-correct SSF
                 if np.isfinite(v):
                     cum[k].append(v)
         med = [np.median(cum[k]) if cum[k] else np.nan for k in range(1, 7)]
@@ -155,19 +168,33 @@ def components_analysis(M):
 
     print(f"\n{'preprocessing':>34} {'N':>4} " + " ".join(f"{'k='+str(k):>7}" for k in range(1, 7)))
     print("-" * 78)
-    r1 = run("drop incomplete DAYS", p_droprows)
-    r2 = run("drop incomplete SUBJECTS", p_dropsubj)
-    r3 = run("regular grid + interpolate", p_interp)
-    r4 = run("forward/backward fill", p_ffill)
+    runs = {
+        "drop incomplete DAYS":       run("drop incomplete DAYS", p_droprows),
+        "drop incomplete SUBJECTS":   run("drop incomplete SUBJECTS", p_dropsubj),
+        "regular grid + interpolate": run("regular grid + interpolate", p_interp),
+        "forward/backward fill":      run("forward/backward fill", p_ffill),
+    }
 
-    print("\n  THE FOUR RUNS DISAGREE -- including on the DIRECTION of the trend.")
-    print("  An answer that flips with an arbitrary cleaning choice is not an answer.")
+    # --- report the disagreement rather than asserting it ---
+    finals = [r[-1] for r in runs.values() if np.isfinite(r[-1])]
+    trends = [np.sign(r[-1] - r[0]) for r in runs.values()
+              if np.isfinite(r[-1]) and np.isfinite(r[0]) and (r[-1] - r[0]) != 0]
+    print()
+    if finals:
+        print(f"  spread across preprocessings at k=6 : {max(finals) - min(finals):.3f}")
+    if trends and len(set(trends)) > 1:
+        print("  => the runs DISAGREE on the DIRECTION of the trend. An answer that flips")
+        print("     with an arbitrary cleaning choice is not an answer.")
+    elif trends:
+        print("  => the runs agree on direction; residual differences reflect DATA")
+        print("     SELECTION between cleaning rules, not the FFT gap artefact (now handled).")
+    else:
+        print("  => trends are flat/degenerate; no direction to compare.")
     print("\n  What DOES survive, and is not a matter of preprocessing:")
     print("    * PCA orders components by VARIANCE, not by cycle-phase information.")
-    print("      There is no reason for those to coincide, and NOISE IS VARIANCE --")
-    print("      so accumulating components to 95% of variance accumulates noise too.")
-    print("    * Whether that hurts MORE than the extra signal helps is exactly what")
-    print("      this dataset cannot resolve. See sections (3) and (4).")
+    print("      NOISE IS VARIANCE -- accumulating to 95% of variance accumulates noise.")
+    print("    * Whether that hurts more than the extra signal helps is exactly what this")
+    print("      dataset cannot resolve. See sections (3) and (4).")
 
 
 # ------------------------------- (3) THE AUDIT ------------------------------- #
@@ -176,6 +203,10 @@ def interpolation_bias_audit(n_rep=400, seed=7):
 
     Ground truth known by construction: a 28-day cycle + white noise at a KNOWN
     signal fraction. Remove days at random, interpolate linearly, re-estimate.
+
+    NB: this path INTENTIONALLY feeds an interpolated (gap-filled) series to the
+    estimator -- that is the artefact being measured. Do NOT route it through
+    regular_grid; doing so would defeat the purpose of the audit.
     """
     print("\n" + "=" * 72)
     print("(3)  AUDIT: DOES GAP INTERPOLATION INFLATE THE SSF?")
@@ -200,7 +231,7 @@ def interpolation_bias_audit(n_rep=400, seed=7):
                 if frac > 0:
                     s.iloc[rng.choice(T, int(T * frac), replace=False)] = np.nan
                     s = s.interpolate(limit_direction="both")
-                v = ssf_spectral(s.values)
+                v = ssf_spectral(s.values)          # intentional: measure interp inflation
                 if np.isfinite(v):
                     est.append(v)
             m = float(np.median(est))
@@ -239,12 +270,17 @@ def contiguous_only(M, min_len=50):
         seg = g.iloc[best_a: best_a + best_len]
         sc, _ = pc_scores(seg[SIGNALS].values)
         pc1 = sc[:, 0]
+        segdays = seg.day.values
         e = seg.estrogen.values.astype(float)
         m = np.isfinite(e)
         rows.append(dict(
             length=best_len,
-            ssf_pc1=ssf_spectral(pc1),
-            ssf_e3g=ssf_spectral(e[m]) if m.sum() >= 40 else np.nan,
+            # PC1 segment is contiguous by construction; regular_grid is a no-op here but
+            # keeps the call identical to the rest of the package.
+            ssf_pc1=_ssf_on_grid(pc1, segdays),
+            # E3G can still have holes INSIDE the six-signal-contiguous segment; expose
+            # them on the day grid instead of compacting via e[m] (the C1/C2 bug class).
+            ssf_e3g=_ssf_on_grid(e, segdays) if np.isfinite(e).sum() >= 40 else np.nan,
             r_pc1_e3g=(abs(np.corrcoef(pc1[m], e[m])[0, 1])
                        if m.sum() >= 25 and np.std(e[m]) > 1e-9 else np.nan),
         ))
@@ -263,15 +299,28 @@ def contiguous_only(M, min_len=50):
 
 
 # ------------------------------- (5) WHAT SURVIVES ------------------------------- #
-def surviving_signal(M):
-    """Is there ANY cycle information in the wearables? (phase, not hormone level)"""
+def surviving_signal(M, B=500, seed=13):
+    """Is there ANY cycle information in the wearables? (phase, not hormone level)
+
+    Tested against a CIRCULAR-SHIFT null (roll the phase labels relative to PC1). A
+    circular shift preserves the autocorrelation/block structure of BOTH series while
+    destroying their alignment -- consistent with the manuscript's prohibition of naive
+    permutation, which would destroy autocorrelation and inflate Type I error.
+    """
     print("\n" + "=" * 72)
     print("(5)  WHAT SURVIVES: is there cycle information in the wearables at all?")
     print("=" * 72)
-    eta2 = []
+
+    def eta2(y, p):
+        sst = ((y - y.mean()) ** 2).sum()
+        if sst <= 0:
+            return np.nan
+        ssb = sum(len(y[p == u]) * (y[p == u].mean() - y.mean()) ** 2 for u in np.unique(p))
+        return ssb / sst
+
+    subj = []
     for _, g in M.groupby("id"):
-        # keep only days where ALL six signals are present (drop rows, not subjects)
-        g = g.dropna(subset=SIGNALS)
+        g = g.dropna(subset=SIGNALS)               # rows, not subjects
         if len(g) < 40:
             continue
         sc, _ = pc_scores(g[SIGNALS].astype(float).values)
@@ -280,20 +329,38 @@ def surviving_signal(M):
         m = pd.notna(ph)
         if m.sum() < 25:
             continue
-        y, p = pc1[m], ph[m]
-        sst = ((y - y.mean()) ** 2).sum()
-        if sst <= 0:
-            continue
-        ssb = sum(len(y[p == u]) * (y[p == u].mean() - y.mean()) ** 2 for u in np.unique(p))
-        eta2.append(ssb / sst)
+        subj.append((pc1[m], ph[m]))
 
-    print(f"\n  eta^2 of PC1 with CYCLE PHASE : {np.median(eta2):.3f}   (n = {len(eta2)})")
-    print("\n  => The cycle signal IS present in the wearables. It is simply not")
-    print("     extractable by a linear, variance-ordered method.")
-    print("     PCA and Fourier both assume STATIONARITY. The menstrual cycle is NOT")
-    print("     stationary: it changes shape, amplitude and duration across cycles and")
-    print("     across women. This is the argument for a time-frequency (wavelet)")
-    print("     decomposition -- and it is the open question I am bringing.")
+    if not subj:
+        print("\n  no subjects meet the coverage threshold.")
+        return dict(eta2_obs=np.nan, eta2_null=np.nan, p=np.nan, n=0)
+
+    obs = float(np.nanmedian([eta2(y, p) for y, p in subj]))
+    rng = np.random.default_rng(seed)
+    null = np.empty(B)
+    for b in range(B):
+        vals = []
+        for y, p in subj:
+            k = int(rng.integers(1, len(p)))
+            vals.append(eta2(y, np.roll(p, k)))    # preserve autocorrelation, break alignment
+        null[b] = np.nanmedian(vals)
+    p_val = (1 + int(np.sum(null >= obs))) / (B + 1)
+
+    print(f"\n  eta^2 of PC1 with CYCLE PHASE : {obs:.3f}   (n = {len(subj)})")
+    print(f"  circular-shift null (median)  : {np.median(null):.3f}   "
+          f"(95th pct {np.quantile(null, .95):.3f})")
+    print(f"  p                             : {p_val:.3f}")
+    if p_val < 0.05:
+        print("\n  => The cycle signal IS present in the wearables above chance. It is")
+        print("     simply not extractable by a linear, variance-ordered method: PCA and")
+        print("     Fourier assume STATIONARITY, and the menstrual cycle is not stationary")
+        print("     (shape, amplitude and duration vary across cycles and women). This is")
+        print("     the argument for a time-frequency (wavelet) decomposition.")
+    else:
+        print("\n  => Against an autocorrelation-preserving null, PC1 does NOT carry")
+        print("     phase information beyond chance. 'Signal is present' is NOT supported")
+        print("     by this test; report it as null, not as suggestive.")
+    return dict(eta2_obs=obs, eta2_null=float(np.median(null)), p=p_val, n=len(subj))
 
 
 def main():
