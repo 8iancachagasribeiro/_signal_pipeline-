@@ -28,6 +28,15 @@ The self-report scale has SIX levels. An early version of this analysis used a
 five-level map that omitted "Not at all", silently discarding valid data and
 producing N=39/median 74 instead of the correct N=41/median 85. The six-level map
 below is the correct one.
+
+NOTE ON SSF vs PAIRING (7.8)
+----------------------------
+SSF is a property of the OUTCOME instrument and must be computed on the COMPLETE,
+regularly spaced outcome series. It must NOT be computed on the estrogen-paired
+subset: dropping days on which E3G is missing punches holes into the series, and the
+spectral SSF estimator is a periodogram that assumes regular spacing. Coupling, by
+contrast, requires pairing. The two estimands therefore use two different series;
+objective_vs_selfreport() keeps them separate.
 """
 import argparse
 import warnings
@@ -303,13 +312,36 @@ def modelfree_bound(df, rng, item="fatigue", B=500):
                 SD_null_median=float(np.median(S_null)), p=p)
 
 
-# ------------------------------- 7.8 ------------------------------- #
+# ------------------------------- 7.8 (CORRECTED) ------------------------------- #
 def objective_vs_selfreport(df, data_dir, rng, B=300):
     """Test the manuscript's own prescription inside the dataset: same participants,
-    same days, same predictor, same registered test -- but an OBJECTIVE outcome."""
+    same days, same predictor, same registered test -- but an OBJECTIVE outcome.
+
+    TWO ESTIMANDS, TWO SERIES (this is the corrected logic):
+      * COUPLING  (SD(r_i) + phase-randomised registered test) is estimated on the
+        PAIRED (estrogen, outcome) series. Pairing is required to correlate the two,
+        so dropna on both is correct here.
+      * SSF (spectral) is estimated on the COMPLETE per-person OUTCOME series, loaded
+        from its own source and NOT conditioned on E3G availability. Dropping outcome
+        days on which estrogen is missing punches holes into the series, and the
+        spectral SSF estimator is a periodogram that assumes REGULAR spacing, so the
+        estrogen-gapped series makes it INVALID. Computing SSF on the estrogen-paired
+        subset is exactly what produced the retracted 0.772 / 0.574 values; the
+        complete-series computation below reproduces the corrected 0.474 (RHR) and
+        0.336 (skin temp) of Table 14, and is identical to how instrument_ssf() (7.2)
+        computes these -- so the two functions can never again disagree.
+
+    NOTE (regular-spacing assumption, declared): the complete daily series is treated
+    as evenly spaced, the same assumption the manuscript makes. Fitbit RHR/temp have
+    near-complete daily coverage. Where a wearable carries material internal day-gaps,
+    the rigorous variant is the longest contiguous gap-free stretch (the actigraphy
+    method, 7.9) or a Lomb-Scargle periodogram. This function does NOT interpolate:
+    gap-filling injects artificial smoothness and would bias SSF UPWARD.
+    """
     print("\n" + "=" * 74)
     print("7.8  OBJECTIVE vs SELF-REPORT (Table 13) -- EXPLORATORY")
     print("=" * 74)
+
     rhr = pd.read_csv(f"{data_dir}/resting_heart_rate.csv")[["id", "day_in_study", "value"]] \
             .rename(columns={"value": "rhr"})
     ct = pd.read_csv(f"{data_dir}/computed_temperature.csv")
@@ -317,40 +349,71 @@ def objective_vs_selfreport(df, data_dir, rng, B=300):
             .rename(columns={"sleep_start_day_in_study": "day_in_study",
                              "nightly_temperature": "temp"})
     d = df.copy(); d["fatigue_n"] = d.fatigue.map(ORDINAL)
+
+    # --- paired frame: for COUPLING only (correlation + registered test) ---
     m = d[["id", "day_in_study", "estrogen", "fatigue_n"]] \
         .merge(rhr, on=["id", "day_in_study"], how="left") \
         .merge(ct,  on=["id", "day_in_study"], how="left")
 
+    # --- complete per-person OUTCOME series: for SSF only (NOT estrogen-conditioned) ---
+    # Built exactly as instrument_ssf() (7.2) builds them.
+    complete = {
+        "fatigue_n": {pid: g.sort_values("day_in_study").fatigue.map(ORDINAL).values
+                      for pid, g in df.groupby("id")},
+        "rhr":       {pid: g.sort_values("day_in_study").rhr.values
+                      for pid, g in rhr.groupby("id")},
+        "temp":      {pid: g.sort_values("day_in_study").temp.values
+                      for pid, g in ct.groupby("id")},
+    }
+
     print(f"{'outcome':>26} {'kind':>12} {'SSF':>7} {'SD(r_i)':>9} {'null':>8} {'p':>7}")
     print("-" * 74)
     rows = []
+    ssf_by_outcome, p_by_outcome = {}, {}
     for col, lab, kind in (("fatigue_n", "fatigue", "SELF-REPORT"),
                            ("rhr", "resting heart rate", "OBJECTIVE"),
                            ("temp", "skin temperature", "OBJECTIVE")):
         per, ss = [], []
-        for _, g in m.groupby("id"):
+        for pid, g in m.groupby("id"):
             gg = g.dropna(subset=["estrogen", col])
             if len(gg) >= MIN_PAIRED:
-                per.append((gg.estrogen.values.astype(float), gg[col].values.astype(float)))
-                v = ssf_spectral(gg[col].values.astype(float))
-                if np.isfinite(v):
-                    ss.append(v)
+                # COUPLING: paired series (estrogen aligned with outcome)
+                per.append((gg.estrogen.values.astype(float),
+                            gg[col].values.astype(float)))
+                # SSF: this SAME participant's COMPLETE outcome series (no E3G gaps)
+                y_full = complete[col].get(pid)
+                if y_full is not None and len(y_full) >= MIN_PAIRED:
+                    v = ssf_spectral(np.asarray(y_full, dtype=float))
+                    if np.isfinite(v):
+                        ss.append(v)
         if len(per) < 10:
             continue
         S = np.std([corr(x, y) for x, y in per])
         Sn = np.array([np.std([corr(phase_randomize(x, rng), y) for x, y in per])
                        for _ in range(B)])
         p = (1 + int(np.sum(Sn >= S))) / (B + 1)
+        ssf_med = float(np.median(ss)) if ss else np.nan
         star = " *" if p < 0.05 else ""
-        print(f"{lab:>26} {kind:>12} {np.median(ss):>7.3f} {S:>9.4f} "
+        print(f"{lab:>26} {kind:>12} {ssf_med:>7.3f} {S:>9.4f} "
               f"{np.median(Sn):>8.4f} {p:>7.3f}{star}")
-        rows.append(dict(outcome=lab, kind=kind, ssf=np.median(ss), SD_ri=S,
+        rows.append(dict(outcome=lab, kind=kind, ssf=ssf_med, SD_ri=S,
                          null_SD=float(np.median(Sn)), p=p))
+        ssf_by_outcome[lab] = ssf_med
+        p_by_outcome[lab] = p
+
+    # --- caveats: computed from the results above, NOT hardcoded ---
+    n_tests = len(rows)
+    alpha_bonf = (0.05 / n_tests) if n_tests else float("nan")
+    temp_p = p_by_outcome.get("skin temperature", float("nan"))
+    rhr_ssf = ssf_by_outcome.get("resting heart rate", float("nan"))
+    best_lab = max(ssf_by_outcome, key=ssf_by_outcome.get) if ssf_by_outcome else "-"
     print("\n  CAVEATS THAT MUST TRAVEL WITH THIS RESULT:")
-    print("   1. p = .027 with 3 tests does NOT survive Bonferroni (alpha = .0167).")
-    print("      EXPLORATORY and suggestive; not confirmatory.")
-    print("   2. Resting HR has the BEST SSF of all (.772) and shows NO coupling.")
-    print("      Instrument quality is NECESSARY, NOT SUFFICIENT.")
+    print(f"   1. skin-temperature p = {temp_p:.3f} with {n_tests} tests does NOT survive")
+    print(f"      Bonferroni (alpha = {alpha_bonf:.4f}). EXPLORATORY and suggestive; not confirmatory.")
+    print(f"   2. Resting HR shows NO coupling despite carrying the highest SSF of the")
+    print(f"      three outcomes ({rhr_ssf:.3f}); instrument quality is NECESSARY, NOT SUFFICIENT.")
+    if best_lab != "resting heart rate":
+        print(f"      [audit check: highest SSF is actually {best_lab} = {ssf_by_outcome[best_lab]:.3f}]")
     print("   3. Skin temperature is cycle-locked via PROGESTERONE (luteal rise);")
     print("      its estradiol coupling may be confounded.")
     return pd.DataFrame(rows)
