@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 actigraphy_replication.py — Second-domain replication of the instrumental measurement.
+(CORRECTED: HYPERAKTIV labels are now read from patient_info.csv, not from the folder.)
 
 Reproduces Tables 15 and 16 of the manuscript (sections 7.9 and 7.10).
 
@@ -13,26 +14,14 @@ the field, or a defect of that one study?
 This script applies the SAME estimator, at the SAME relative cutoff, to an entirely
 different domain: clinical actigraphy.
 
-WHY THE COMPARISON IS STRUCTURALLY VALID
+CORRECTION (v-audit): the HYPERAKTIV bug
 ----------------------------------------
-The estimator is scale-invariant. `f_cut = 0.25` means "periods shorter than 4 samples
-are the noise band", whatever the sampling interval is.
-
-  menstrual scale : 1 sample = 1 day,  signal = 28 days (f = 0.036), noise = < 4 days
-  circadian scale : 1 sample = 1 hour, signal = 24 hours (f = 0.042), noise = < 4 hours
-
-Both place the signal ~24-28x below the sampling frequency and the noise band above
-one quarter of it. The two applications are structurally identical.
-
-WHAT IT FINDS
--------------
-(1) Circadian SSF = 0.681 across n = 162 subjects in four clinical populations, against
-    0.336-0.474 for the menstrual signature in the SAME class of wearable device.
-    => The limiting factor is the CONSTRUCT, not the instrument.
-
-(2) SSF does NOT depend on the number of cycles observed (flat from 3 to 16 cycles).
-    => The 0.469 measured in mcPHASES (~3 cycles) is NOT an artefact of short duration.
-       This was the test with the greatest potential to refute the manuscript's argument.
+HYPERAKTIV's activity_data/ folder holds 51 ADHD patients AND 52 clinical controls
+(Hicks et al., 2021; the paper's own ground truth is patient_info.csv). The previous
+version labelled EVERY file in that folder "ADHD", folding ~52 controls into the ADHD
+cohort and reporting n = 85 ADHD — impossible, since the whole ADHD pool is 51. The
+label lives in patient_info.csv, keyed by subject ID, and is now joined in explicitly.
+Files that cannot be POSITIVELY confirmed as ADHD are EXCLUDED, never assumed.
 
 DATA (all open, no credentialing required)
 ------------------------------------------
@@ -45,7 +34,9 @@ Expected layout under --data-dir:
     depresjon/data/control/*.csv
     psykose/patient/*.csv
     psykose/control/*.csv
-    activity_data/*.csv            (HYPERAKTIV; semicolon-separated)
+    activity_data/*.csv            (HYPERAKTIV activity series; ID is in the filename)
+    patient_info.csv              (HYPERAKTIV GROUND TRUTH: subject ID -> ADHD label)
+                                   (searched recursively; override with --hyperaktiv-metadata)
 
 NOTE: DEPRESJON and PSYKOSE share control subjects. They are de-duplicated below;
 failing to do so inflates n and produces identical duplicated statistics.
@@ -53,10 +44,13 @@ failing to do so inflates n and produces identical duplicated statistics.
 USAGE
 -----
     python actigraphy_replication.py --data-dir /path/to/actigraphy
+    # if the label column is non-standard:
+    python actigraphy_replication.py --data-dir ... --adhd-column DIAGNOSIS --adhd-positive ADHD
 """
 import argparse
 import glob
 import os
+import re
 import warnings
 
 import numpy as np
@@ -66,13 +60,18 @@ from ssf_estimators import ssf_spectral
 
 warnings.filterwarnings("ignore")
 
+# Folder-labelled sources ONLY. Here the folder legitimately IS the diagnosis.
+# HYPERAKTIV is deliberately NOT in this list: its folder mixes ADHD and controls,
+# so its label must come from patient_info.csv (see _collect_hyperaktiv).
 SOURCES = [
     ("depresjon/data/condition/*.csv", "major depression"),
     ("depresjon/data/control/*.csv",   "controls"),
     ("psykose/patient/*.csv",          "schizophrenia"),
     ("psykose/control/*.csv",          "controls"),      # de-duplicated against the above
-    ("activity_data/*.csv",            "ADHD"),
 ]
+
+HYPERAKTIV_ACTIVITY_GLOB = "activity_data/*.csv"
+HYPERAKTIV_METADATA = "patient_info.csv"
 
 
 def load_series(path):
@@ -118,26 +117,165 @@ def longest_contiguous(s, step_hours=1.0):
     return s.iloc[best_start:best_start + best_len]
 
 
-def collect(data_dir, min_hours=48):
+def _process_file(path, label, seen, rows, min_hours):
+    """Resample -> longest gap-free segment -> de-duplicate -> SSF. One code path for
+    every dataset, so DEPRESJON, PSYKOSE and HYPERAKTIV are treated identically."""
+    s = load_series(path)
+    if s is None or len(s) < min_hours:
+        return False
+    s = s.resample("1h").mean().dropna()
+    seg = longest_contiguous(s)
+    if len(seg) < min_hours:
+        return False
+    # de-duplication key: DEPRESJON and PSYKOSE share control subjects
+    key = (round(float(seg.mean()), 4), len(seg))
+    if key in seen:
+        return False
+    seen.add(key)
+    v = ssf_spectral(seg.values)
+    if not np.isfinite(v):
+        return False
+    rows.append(dict(group=label, hours=len(seg), ssf=v, series=seg.values))
+    return True
+
+
+# --------------------------- HYPERAKTIV label join --------------------------- #
+def _pick(df, names):
+    for n in names:
+        if n in df.columns:
+            return n
+    return None
+
+
+def _find_metadata(data_dir, metadata):
+    """Locate patient_info.csv. Explicit path wins; otherwise search common spots and,
+    failing that, the whole tree. Returns None if genuinely absent."""
+    cands = []
+    if metadata:
+        cands.append(metadata if os.path.isabs(metadata)
+                     else os.path.join(data_dir, metadata))
+    cands += [os.path.join(data_dir, HYPERAKTIV_METADATA),
+              os.path.join(data_dir, "hyperaktiv", HYPERAKTIV_METADATA)]
+    for c in cands:
+        if c and os.path.isfile(c):
+            return c
+    hits = glob.glob(os.path.join(data_dir, "**", HYPERAKTIV_METADATA), recursive=True)
+    return hits[0] if hits else None
+
+
+def _subject_id_from_path(path):
+    """Subject ID = first integer in the filename (e.g. patient_activity_12.csv -> 12)."""
+    m = re.search(r"(\d+)", os.path.basename(path))
+    return int(m.group(1)) if m else None
+
+
+def _hyperaktiv_adhd_ids(data_dir, metadata=None, adhd_column=None, adhd_positive=None):
+    """Return (set_of_ADHD_ids, human-readable scheme). RAISES rather than guess."""
+    path = _find_metadata(data_dir, metadata)
+    if path is None:
+        raise FileNotFoundError(
+            "HYPERAKTIV patient_info.csv not found. Refusing to label activity files "
+            "blindly as ADHD: the folder mixes 51 ADHD patients with 52 clinical "
+            "controls (Hicks et al., 2021). Provide it with --hyperaktiv-metadata "
+            "/path/to/patient_info.csv."
+        )
+    meta = pd.read_csv(path, sep=None, engine="python")     # sniff , or ;
+    meta.columns = [str(c).strip() for c in meta.columns]
+
+    id_col = _pick(meta, ("ID", "id", "Id", "subject", "SUBJECT", "SubjectID"))
+    if id_col is None:
+        raise KeyError(f"No ID column in {os.path.basename(path)}; "
+                       f"columns = {list(meta.columns)}")
+
+    # Determine how ADHD is encoded, auto-detecting unless the user overrides.
+    if adhd_column is None:
+        c_bin = _pick(meta, ("ADHD",))
+        c_str = _pick(meta, ("DIAGNOSIS", "diagnosis", "GROUP", "group", "label", "LABEL"))
+        if c_bin is not None:
+            adhd_column, kind = c_bin, "num"
+        elif c_str is not None:
+            adhd_column, kind = c_str, "str"
+        else:
+            raise KeyError(
+                f"Cannot find an ADHD label column in {os.path.basename(path)}. "
+                f"Columns = {list(meta.columns)}. Specify one with --adhd-column."
+            )
+    else:
+        if adhd_column not in meta.columns:
+            raise KeyError(f"--adhd-column '{adhd_column}' not in {os.path.basename(path)}; "
+                           f"columns = {list(meta.columns)}")
+        kind = "str"
+
+    if adhd_positive is not None:
+        target = str(adhd_positive).strip().upper()
+        predicate = lambda v: str(v).strip().upper() == target
+        scheme_kind = f"{adhd_column}=='{adhd_positive}'"
+    elif kind == "num":
+        predicate = lambda v: float(v) == 1.0
+        scheme_kind = f"{adhd_column}==1 (binary)"
+    else:
+        predicate = lambda v: str(v).strip().upper() == "ADHD"
+        scheme_kind = f"{adhd_column}=='ADHD' (string)"
+
+    ids = set()
+    for _, r in meta.iterrows():
+        try:
+            if predicate(r[adhd_column]):
+                ids.add(int(float(r[id_col])))
+        except (ValueError, TypeError):
+            continue
+    if not ids:
+        raise ValueError(
+            f"Parsed 0 ADHD subjects from {os.path.basename(path)} using {scheme_kind}. "
+            "Refusing to proceed rather than silently mislabel. Check --adhd-column / "
+            "--adhd-positive."
+        )
+    scheme = f"{os.path.basename(path)} [{scheme_kind}] -> {len(ids)} ADHD ids"
+    return ids, scheme
+
+
+def _collect_hyperaktiv(data_dir, seen, rows, min_hours,
+                        metadata=None, adhd_column=None, adhd_positive=None):
+    """Ingest HYPERAKTIV ADHD subjects ONLY, joined by ID against patient_info.csv.
+    Controls in the same folder are excluded (they would contaminate the ADHD row; the
+    manuscript's 'controls' row is DEPRESJON-derived). To study them, route them to a
+    distinct group here — never into 'ADHD' or the existing 'controls'."""
+    files = sorted(glob.glob(os.path.join(data_dir, HYPERAKTIV_ACTIVITY_GLOB)))
+    if not files:
+        return                                  # HYPERAKTIV simply not present
+    adhd_ids, scheme = _hyperaktiv_adhd_ids(data_dir, metadata, adhd_column, adhd_positive)
+
+    kept = excluded_non_adhd = unmatched = 0
+    for path in files:
+        sid = _subject_id_from_path(path)
+        if sid is None:
+            unmatched += 1                       # cannot resolve an ID -> do NOT assume ADHD
+            continue
+        if sid not in adhd_ids:
+            excluded_non_adhd += 1               # confirmed non-ADHD (control) -> exclude
+            continue
+        if _process_file(path, "ADHD", seen, rows, min_hours):
+            kept += 1
+
+    print(f"[HYPERAKTIV] label source : {scheme}")
+    print(f"[HYPERAKTIV] activity files: {len(files)} | ADHD kept: {kept} | "
+          f"non-ADHD excluded: {excluded_non_adhd} | unresolved-ID excluded: {unmatched}")
+    if kept + excluded_non_adhd + unmatched != len(files):
+        print("[HYPERAKTIV] WARNING: counts do not reconcile with file total — inspect layout.")
+
+
+def collect(data_dir, min_hours=48, hyperaktiv_metadata=None,
+            adhd_column=None, adhd_positive=None):
     """Hourly-resampled, gap-free segments, de-duplicated across datasets."""
     rows, seen = [], set()
+    # Folder-labelled datasets (DEPRESJON, PSYKOSE): the folder IS the diagnosis.
     for pattern, label in SOURCES:
         for path in sorted(glob.glob(os.path.join(data_dir, pattern))):
-            s = load_series(path)
-            if s is None or len(s) < min_hours:
-                continue
-            s = s.resample("1h").mean().dropna()
-            seg = longest_contiguous(s)
-            if len(seg) < min_hours:
-                continue
-            # de-duplication key: DEPRESJON and PSYKOSE share control subjects
-            key = (round(float(seg.mean()), 4), len(seg))
-            if key in seen:
-                continue
-            seen.add(key)
-            v = ssf_spectral(seg.values)
-            if np.isfinite(v):
-                rows.append(dict(group=label, hours=len(seg), ssf=v, series=seg.values))
+            _process_file(path, label, seen, rows, min_hours)
+    # HYPERAKTIV: label comes from patient_info.csv, not from the folder.
+    _collect_hyperaktiv(data_dir, seen, rows, min_hours,
+                        metadata=hyperaktiv_metadata,
+                        adhd_column=adhd_column, adhd_positive=adhd_positive)
     return rows
 
 
@@ -206,12 +344,20 @@ def table_16(rows, min_cycles=16):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True,
-                    help="directory containing depresjon/, psykose/ and activity_data/")
+                    help="directory containing depresjon/, psykose/, activity_data/ and patient_info.csv")
     ap.add_argument("--min-hours", type=int, default=48,
                     help="minimum gap-free segment length, in hours (default 48)")
+    ap.add_argument("--hyperaktiv-metadata", default=None,
+                    help="path to HYPERAKTIV patient_info.csv (auto-located if omitted)")
+    ap.add_argument("--adhd-column", default=None,
+                    help="label column in patient_info.csv (auto-detected: ADHD binary or DIAGNOSIS)")
+    ap.add_argument("--adhd-positive", default=None,
+                    help="value marking ADHD when the label is a string (e.g. 'ADHD')")
     a = ap.parse_args()
 
-    rows = collect(a.data_dir, a.min_hours)
+    rows = collect(a.data_dir, a.min_hours,
+                   hyperaktiv_metadata=a.hyperaktiv_metadata,
+                   adhd_column=a.adhd_column, adhd_positive=a.adhd_positive)
     if not rows:
         raise SystemExit("no usable series found -- check --data-dir layout")
     table_15(rows)
