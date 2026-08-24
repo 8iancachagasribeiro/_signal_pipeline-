@@ -1,0 +1,30 @@
+name: Article 1 pipeline audit
+
+on:
+  push:
+    branches:
+      - audit/article1-methodological-fixes
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile Python files
+        run: python -m py_compile *.py
+      - name: Run consistency audit
+        run: python audit_consistency.py
+      - name: Validate masking mechanism
+        run: python h4_frontier.py --validate-only
+      - name: Validate SSF calibration
+        run: python registered_test_power.py diagnostic --q 0.50
