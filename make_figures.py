@@ -1,166 +1,62 @@
 #!/usr/bin/env python3
+"""Regenerate the five current manuscript figures from audited analysis outputs.
+
+FIG1 estimator validation, empirical SSF, objective-vs-self-report check
+FIG2 masking mechanism, recovery fidelity, sparse-sample false positives
+FIG3 attenuation identification sensitivity and SSF-calibrated power sensitivity
+FIG4 hormone level versus cycle phase
+FIG5 instrument/design sensitivity over the unidentified coupled-smooth fraction q
 """
-make_figures.py — regenerates all five manuscript figures from the results CSVs.
-
-Figures were originally produced inline and are reconstructed here so a reviewer can
-regenerate them from the analysis outputs.
-
-  FIG 1  masking mechanism | recovery frontier (with the DETECTION-ONLY zone hatched)
-         | fidelity: detection is easy, recovery is hard
-  FIG 2  attenuation cascade | power ideal vs actual | which criterion fails
-  FIG 3  instrument frontier | budget allocation | variance/bias dissociation
-  FIG 4  phase-locked: wrong predictor -> null even when the effect is huge
-  FIG 5  estimator validation | corrected SSF | objective vs self-report
-
-Usage:  python make_figures.py --results ./results --out ./figures
-"""
-import argparse
-import os
-import warnings
-
-import numpy as np
-import pandas as pd
+from __future__ import annotations
+import argparse,os,warnings
+warnings.filterwarnings('ignore')
+import numpy as np,pandas as pd
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-
 import h4_frontier as H
 
-warnings.filterwarnings("ignore")
+def _need(res,names):
+    paths=[os.path.join(res,n) for n in names]; missing=[p for p in paths if not os.path.exists(p)]
+    if missing: raise FileNotFoundError(', '.join(missing))
+    return paths
 
+def fig1(res,out):
+    pssf,pobj=_need(res,['table08_instrument_ssf.csv','table14_objective.csv']); ssf=pd.read_csv(pssf); obj=pd.read_csv(pobj); fig,ax=plt.subplots(1,3,figsize=(15.5,4.5)); x=np.arange(3); w=.36
+    ax[0].bar(x-w/2,[.077,.036,.028],w,label='mean |bias|'); ax[0].bar(x+w/2,[.157,.082,.082],w,label='max |bias|'); ax[0].set_xticks(x); ax[0].set_xticklabels(['AR(1)','ACF-linear','Spectral']); ax[0].set_ylabel('bias'); ax[0].set_title('(a) Estimator validation'); ax[0].legend(fontsize=8)
+    vals=ssf.spectral.values; ax[1].bar(np.arange(len(vals)),vals); ax[1].set_xticks(np.arange(len(vals))); ax[1].set_xticklabels([str(m)[:14] for m in ssf.measure],rotation=40,ha='right',fontsize=7); ax[1].set_ylabel('smooth-signal fraction'); ax[1].set_title('(b) Empirical SSF')
+    xx=np.arange(len(obj)); ax[2].bar(xx-.18,obj.SD_ri,.36,label='observed SD(r_i)'); ax[2].bar(xx+.18,obj.null_SD,.36,label='surrogate-null median')
+    for i,p in enumerate(obj.p): ax[2].text(i,max(obj.SD_ri.iloc[i],obj.null_SD.iloc[i])+.004,f'p={p:.3f}',ha='center',fontsize=7)
+    ax[2].set_xticks(xx); ax[2].set_xticklabels(obj.outcome,rotation=20,ha='right',fontsize=8); ax[2].set_title('(c) Objective vs self-report (exploratory)'); ax[2].legend(fontsize=7); plt.tight_layout(); path=f'{out}/FIG1_estimators_ssf_objective.png'; plt.savefig(path,dpi=220,bbox_inches='tight'); plt.close(); return path
 
-def fig1(res, out):
-    fr = pd.read_csv(f"{res}/h4_frontier_results.csv")
-    fid = pd.read_csv(f"{res}/table04_fidelity.csv")
-    fig, ax = plt.subplots(1, 3, figsize=(15.5, 4.6))
+def fig2(res,out):
+    p3,p4=_need(res,['table03_null_calibration.csv','table04_fidelity.csv']); nul=pd.read_csv(p3); fid=pd.read_csv(p4); fig,ax=plt.subplots(1,3,figsize=(15.5,4.5)); xg=np.linspace(.15,.95,300); ax[0].plot(xg,H.inverted_u(xg),lw=2); mu=H.DA_OPT-H.K_GAIN*H._E2_MEAN
+    for b in (mu-.16,mu+.16):
+        lo,hi=b+H.K_GAIN*.13,b+H.K_GAIN; xs=np.linspace(lo,hi,60); ax[0].plot(xs,H.inverted_u(xs),lw=5)
+    ax[0].axvline(H.DA_OPT,ls=':'); ax[0].set_xlabel('dopaminergic tone'); ax[0].set_ylabel('performance'); ax[0].set_title('(a) Bidirectional masking mechanism')
+    piv=fid.pivot(index='obs_per_person',columns='sigma_b',values='fidelity').sort_index(); im=ax[1].imshow(piv.values,origin='lower',aspect='auto',vmin=0,vmax=1); ax[1].set_xticks(range(len(piv.columns))); ax[1].set_xticklabels([f'{v:.2f}' for v in piv.columns]); ax[1].set_yticks(range(len(piv.index))); ax[1].set_yticklabels(piv.index); ax[1].set_xlabel('heterogeneity (sigma_b)'); ax[1].set_ylabel('observations/person'); ax[1].set_title('(b) Recovery fidelity'); plt.colorbar(im,ax=ax[1],label='corr(estimated,true)')
+    ax[2].plot(nul.obs_per_person,nul.crit1_fp,'o-',label='effect-size criterion alone'); ax[2].plot(nul.obs_per_person,nul.lrt_fp,'o-',label='LRT alone'); ax[2].plot(nul.obs_per_person,nul.both_fp,'o-',label='dual rule'); ax[2].axhline(.05,ls='--',label='alpha=.05'); ax[2].set_ylim(-.03,1.05); ax[2].set_xlabel('observations/person'); ax[2].set_ylabel('false-positive rate'); ax[2].set_title('(c) Why sparse thresholds fail'); ax[2].legend(fontsize=7); plt.tight_layout(); path=f'{out}/FIG2_mechanism_fidelity.png'; plt.savefig(path,dpi=220,bbox_inches='tight'); plt.close(); return path
 
-    # (a) the mechanism
-    xg = np.linspace(0.15, 0.95, 300)
-    ax[0].plot(xg, H.inverted_u(xg), "k-", lw=2.2, zorder=1)
-    mu = H.DA_OPT - H.K_GAIN * H._E2_MEAN
-    for b, col, lab in ((mu - .16, "#2166ac", "low baseline tone\nE2 up -> perf UP"),
-                        (mu + .16, "#b2182b", "high baseline tone\nE2 up -> perf DOWN")):
-        lo, hi = b + H.K_GAIN * .13, b + H.K_GAIN * 1.0
-        xs = np.linspace(lo, hi, 50)
-        ax[0].plot(xs, H.inverted_u(xs), color=col, lw=6, alpha=.9,
-                   solid_capstyle="round", zorder=2)
-        ax[0].annotate("", xy=(hi, H.inverted_u(hi)), xytext=(lo, H.inverted_u(lo)),
-                       arrowprops=dict(arrowstyle="-|>", color=col, lw=2.4,
-                                       mutation_scale=20), zorder=3)
-        ax[0].text(b, H.inverted_u(b) - .17, lab, color=col, ha="center",
-                   fontsize=7.5, weight="bold")
-    ax[0].axvline(H.DA_OPT, ls=":", c="gray", lw=1.2)
-    ax[0].set_xlabel("dopaminergic tone"); ax[0].set_ylabel("cognitive performance")
-    ax[0].set_title("(a) The masking mechanism", fontsize=9.5, weight="bold")
-    ax[0].set_ylim(0, 1.18)
+def fig3(res,out):
+    p9,pp=_need(res,['table09_attenuation_sensitivity.csv','registered_test_power_sensitivity.csv']); att=pd.read_csv(p9); pw=pd.read_csv(pp); fig,ax=plt.subplots(1,3,figsize=(15.5,4.4)); ax[0].plot(att.f,att.attenuation,'o-'); ax[0].set_xlabel('f: high-frequency variance treated as genuine'); ax[0].set_ylabel('implied attenuation'); ax[0].set_ylim(0,1.05); ax[0].set_title('(a) Identification sensitivity')
+    for q,g in pw.groupby('coupled_fraction'): ax[1].plot(g.sigma_b,g.power,'o-',label=f'q={q:.2f}')
+    ax[1].axhline(.80,ls='--'); ax[1].set_xlabel('sigma_b'); ax[1].set_ylabel('surrogate-test power'); ax[1].set_ylim(-.03,1.03); ax[1].set_title('(b) Power not identified by SSF alone'); ax[1].legend(fontsize=7)
+    piv=pw.pivot(index='coupled_fraction',columns='sigma_b',values='power').sort_index(); im=ax[2].imshow(piv.values,origin='lower',aspect='auto',vmin=0,vmax=1); ax[2].set_xticks(range(len(piv.columns))); ax[2].set_xticklabels([f'{v:.3g}' for v in piv.columns],rotation=30); ax[2].set_yticks(range(len(piv.index))); ax[2].set_yticklabels([f'{v:.2f}' for v in piv.index]); ax[2].set_xlabel('sigma_b'); ax[2].set_ylabel('q'); ax[2].set_title('(c) SSF-calibrated sensitivity surface'); plt.colorbar(im,ax=ax[2],label='power'); plt.tight_layout(); path=f'{out}/FIG3_attenuation_power_sensitivity.png'; plt.savefig(path,dpi=220,bbox_inches='tight'); plt.close(); return path
 
-    # (b) frontier WITH the detection-only zone hatched (audit correction)
-    d = fr[fr.sigma_b == 0.10].pivot(index="obs_per_cycle", columns="reliability",
-                                     values="recovery")
-    im = ax[1].imshow(d.values, origin="lower", aspect="auto", cmap="viridis", vmin=0, vmax=1)
-    ax[1].set_xticks(range(len(d.columns)))
-    ax[1].set_xticklabels([f"{c:.2f}" for c in d.columns], fontsize=8)
-    ax[1].set_yticks(range(len(d.index))); ax[1].set_yticklabels(d.index, fontsize=8)
-    X, Y = np.meshgrid(np.arange(len(d.columns)), np.arange(len(d.index)))
-    ax[1].contour(X, Y, d.values, levels=[0.8], colors="white", linewidths=2.5, linestyles="--")
-    n_hatch = sum(1 for v in d.index if v * 2 < 14)
-    ax[1].add_patch(mpatches.Rectangle((-.5, -.5), len(d.columns), n_hatch,
-                                       facecolor="none", edgecolor="red", hatch="///",
-                                       lw=2, zorder=5))
-    ax[1].text(len(d.columns)/2 - .5, n_hatch/2 - .6,
-               "DETECTION-ONLY ZONE\ncriterion (i) saturated by noise\n(100% FP at 4 obs)",
-               ha="center", va="center", fontsize=7.5, color="red", weight="bold",
-               bbox=dict(boxstyle="round", fc="white", ec="red", alpha=.92))
-    ax[1].set_xlabel("outcome reliability"); ax[1].set_ylabel("observations per cycle")
-    ax[1].set_title("(b) Recovery frontier (CORRECTED)\nhatched zone is NOT a design recommendation",
-                    fontsize=9.5, weight="bold")
-    plt.colorbar(im, ax=ax[1], label="recovery rate")
+def fig4(res,out):
+    (p,)=_need(res,['fig04_phase_locked.csv']); d=pd.read_csv(p); fig,ax=plt.subplots(1,2,figsize=(10.5,4.3)); x=np.arange(len(d)); w=.38; ax[0].bar(x-w/2,np.abs(d.r_e2_level),w,label='|r| with E2 level'); ax[0].bar(x+w/2,d.phase_eta2,w,label='eta^2 of cycle phase'); ax[0].set_xticks(x); ax[0].set_xticklabels(d.item,rotation=25,ha='right'); ax[0].legend(fontsize=8); ax[0].set_title('(a) Level vs phase'); ax[1].bar(x,d.menstrual_mean); ax[1].axhline(0,lw=1); ax[1].set_xticks(x); ax[1].set_xticklabels(d.item,rotation=25,ha='right'); ax[1].set_ylabel('menstrual-phase within-person mean'); ax[1].set_title('(b) Menstrual-phase shift'); plt.tight_layout(); path=f'{out}/FIG4_phase_locked.png'; plt.savefig(path,dpi=220,bbox_inches='tight'); plt.close(); return path
 
-    # (c) fidelity
-    cols = {0.05: "#d6604d", 0.10: "#f4a582", 0.15: "#92c5de", 0.20: "#2166ac"}
-    for sb in (0.05, 0.10, 0.15, 0.20):
-        s = fid[fid.sigma_b == sb].sort_values("obs_per_person")
-        ax[2].plot(s.obs_per_person, s.fidelity, "o-", color=cols[sb], lw=1.9, ms=5,
-                   label=f"heterogeneity={sb:.2f}")
-    ax[2].axhline(.70, ls="--", c="k", lw=1.2)
-    ax[2].axhline(.50, ls=":", c="gray", lw=1)
-    ax[2].axvspan(2, 10, alpha=.13, color="red")
-    ax[2].set_xlabel("total observations per person")
-    ax[2].set_ylabel("fidelity  corr(r-hat, r-true)")
-    ax[2].set_title("(c) Detecting is easy. Recovering is hard.", fontsize=9.5, weight="bold")
-    ax[2].set_ylim(.1, 1.0); ax[2].legend(fontsize=7, loc="lower right")
-
-    plt.tight_layout()
-    plt.savefig(f"{out}/FIG1_mechanism_frontier.png", dpi=180, bbox_inches="tight")
-    plt.close()
-
-
-def fig5(res, out):
-    ssf = pd.read_csv(f"{res}/table07_instrument_ssf.csv")
-    obj = pd.read_csv(f"{res}/table13_objective.csv")
-    fig, ax = plt.subplots(1, 3, figsize=(15.5, 4.4))
-
-    # (a) estimator validation (values from ssf_estimators.validate())
-    names = ["AR(1)", "ACF-linear", "SPECTRAL\n(adopted)"]
-    bias, mx = [.077, .036, .028], [.157, .082, .082]
-    x = np.arange(3); w = .36
-    ax[0].bar(x - w/2, bias, w, color=["#b2182b", "#f4a582", "#2166ac"],
-              edgecolor="k", lw=.6, label="mean |bias|")
-    ax[0].bar(x + w/2, mx, w, color=["#b2182b", "#f4a582", "#2166ac"], alpha=.45,
-              edgecolor="k", lw=.6, label="max |bias|")
-    ax[0].set_xticks(x); ax[0].set_xticklabels(names, fontsize=8.5)
-    ax[0].set_ylabel("bias against known truth"); ax[0].legend(fontsize=7.5)
-    ax[0].set_title("(a) SSF estimators validated\nagainst known ground truth",
-                    fontsize=9.5, weight="bold")
-
-    # (b) SSF: AR(1) vs spectral
-    ax[1].bar(np.arange(len(ssf)) - w/2, ssf.ar1, w, color="#bdbdbd",
-              edgecolor="k", lw=.6, label="AR(1)  (biased)")
-    ax[1].bar(np.arange(len(ssf)) + w/2, ssf.spectral, w, color="#2166ac",
-              edgecolor="k", lw=.6, label="SPECTRAL (validated)")
-    ax[1].axhline(1.0, ls="--", c="red", lw=1.2)
-    ax[1].set_xticks(range(len(ssf)))
-    ax[1].set_xticklabels([m[:12] for m in ssf.measure], fontsize=6.5, rotation=40, ha="right")
-    ax[1].set_ylabel("smooth signal fraction"); ax[1].legend(fontsize=7.5)
-    ax[1].set_title("(b) Instruments are WORSE than reported\nAR(1) returns an impossible value",
-                    fontsize=9.5, weight="bold")
-
-    # (c) objective vs self-report
-    x = np.arange(len(obj))
-    ax[2].bar(x - w/2, obj.SD_ri, w, color=["#b2182b", "#92c5de", "#2166ac"][:len(obj)],
-              edgecolor="k", lw=.6, label="observed SD(r_i)")
-    ax[2].bar(x + w/2, obj.null_SD, w, color="#e0e0e0", edgecolor="k", lw=.6,
-              label="phase-randomised null")
-    for i, p in enumerate(obj.p):
-        ax[2].text(i, max(obj.SD_ri[i], obj.null_SD[i]) + .006,
-                   f"p={p:.3f}" + (" *" if p < .05 else ""), ha="center", fontsize=8,
-                   weight="bold" if p < .05 else "normal")
-    ax[2].set_xticks(x); ax[2].set_xticklabels(obj.outcome, fontsize=8, rotation=20, ha="right")
-    ax[2].set_ylabel("coupling heterogeneity"); ax[2].legend(fontsize=7.5, loc="upper left")
-    ax[2].set_title("(c) Change the instrument, signal appears\n(EXPLORATORY: p=.027 fails Bonferroni)",
-                    fontsize=9.5, weight="bold")
-
-    plt.tight_layout()
-    plt.savefig(f"{out}/FIG5_estimators_objective.png", dpi=180, bbox_inches="tight")
-    plt.close()
-
+def fig5(res,out):
+    pg,pb=_need(res,['h4v2_ssf_sensitivity_grid.csv','budget_sensitivity.csv']); grid=pd.read_csv(pg); bud=pd.read_csv(pb); fig,ax=plt.subplots(1,3,figsize=(16,4.5)); uq=sorted(grid.coupled_fraction.unique()); q0=float(uq[min(1,len(uq)-1)]); sb0=float(sorted(grid.sigma_b.unique())[-1]); sub=grid[(grid.coupled_fraction==q0)&(grid.sigma_b==sb0)]; piv=sub.pivot(index='ssf_outcome',columns='ssf_predictor',values='dual_rate').sort_index(); im=ax[0].imshow(piv.values,origin='lower',aspect='auto',vmin=0,vmax=1); ax[0].set_xticks(range(len(piv.columns))); ax[0].set_xticklabels([f'{v:.2f}' for v in piv.columns]); ax[0].set_yticks(range(len(piv.index))); ax[0].set_yticklabels([f'{v:.2f}' for v in piv.index]); ax[0].set_xlabel('predictor SSF'); ax[0].set_ylabel('outcome SSF'); ax[0].set_title(f'(a) Instrument sensitivity (q={q0:.2f})'); plt.colorbar(im,ax=ax[0],label='dual rate')
+    scen=list(dict.fromkeys(bud.scenario.tolist())); qvals=sorted(bud.coupled_fraction.unique())
+    for q in qvals:
+        g=bud[bud.coupled_fraction==q].set_index('scenario').reindex(scen); ax[1].plot(range(len(scen)),g.dual_rate,'o-',label=f'q={q:.2f}'); ax[2].plot(range(len(scen)),g.fidelity,'o-',label=f'q={q:.2f}')
+    labels=[s.replace(' observations','') for s in scen]; ax[1].set_xticks(range(len(scen))); ax[1].set_xticklabels(labels,rotation=45,ha='right',fontsize=7); ax[1].set_ylim(-.03,1.03); ax[1].set_ylabel('dual-criterion rate'); ax[1].set_title('(b) Budget sensitivity'); ax[1].legend(fontsize=6); ax[2].axhline(.70,ls='--'); ax[2].set_xticks(range(len(scen))); ax[2].set_xticklabels(labels,rotation=45,ha='right',fontsize=7); ax[2].set_ylim(0,1.03); ax[2].set_ylabel('recovery fidelity'); ax[2].set_title('(c) Person-specific recovery'); plt.tight_layout(); path=f'{out}/FIG5_design_sensitivity.png'; plt.savefig(path,dpi=220,bbox_inches='tight'); plt.close(); return path
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--results", default="./results")
-    ap.add_argument("--out", default="./figures")
-    a = ap.parse_args()
-    os.makedirs(a.out, exist_ok=True)
-    made = []
-    for name, fn in (("FIG1", fig1), ("FIG5", fig5)):
-        try:
-            fn(a.results, a.out); made.append(name)
-        except FileNotFoundError as e:
-            print(f"[skip {name}] missing input: {e.filename}")
-    print(f"[done] regenerated: {', '.join(made) or 'nothing'} -> {a.out}/")
-    print("FIG2/FIG3/FIG4 depend on mcPHASES-derived CSVs; run mcphases_analyses.py first.")
-
-
-if __name__ == "__main__":
-    main()
+    ap=argparse.ArgumentParser(); ap.add_argument('--results',default='./results'); ap.add_argument('--out',default='./figures'); a=ap.parse_args(); os.makedirs(a.out,exist_ok=True); made=[]
+    for name,fn in [('FIG1',fig1),('FIG2',fig2),('FIG3',fig3),('FIG4',fig4),('FIG5',fig5)]:
+        try: made.append(fn(a.results,a.out)); print(f'[made {name}] {made[-1]}')
+        except FileNotFoundError as e: print(f'[skip {name}] missing prerequisite: {e}')
+    print(f'[done] {len(made)}/5 figures regenerated')
+if __name__=='__main__': main()
