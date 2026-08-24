@@ -1,37 +1,26 @@
 # Changelog
 
-## v1.1.0
+## 2026-08-24 — methodological audit branch
 
-### Adicionado
-- `actigraphy_replication.py` — replicação em segundo domínio (seções 7.9 e 7.10 do
-  manuscrito). Reproduz a fração de sinal circadiana em actigrafia clínica (n = 162,
-  quatro populações) e o teste de robustez ao número de ciclos observados.
-- `rodar_grades_500.sh` — executor retomável e paralelo das grades de sigma_b a 500
-  réplicas.
+### Blocking corrections
+- Removed the use of empirical smooth-signal fraction (SSF) as if it were classical reliability in power simulations.
+- Added `ssf_power.py` to calibrate simulated predictor and outcome series directly to target spectral SSF.
+- Added explicit `coupled_fraction` (`q`) because SSF does not identify how much smooth outcome variance is E2-coupled.
+- Reframed registered-test power and budget analyses as sensitivity surfaces rather than point estimates of empirical power.
+- Added participant-specific-predictor random-slope LRT in `fastlrt.py`.
+- Changed mcPHASES surrogate generation to preserve the calendar before Fourier phase randomization.
+- Changed group summaries in the differential-prediction analysis to person-centered within-person associations.
+- Replaced direct SSF-based disattenuation claims with an explicit `f` sensitivity analysis.
 
-### Corrigido
-- **`registered_test_power.py`: `R_X_REAL` e `R_Y_REAL` estavam codificados com os
-  valores do estimador AR(1), que o manuscrito rejeita por enviesado (0,58 e 0,41).
-  Corrigidos para os valores do estimador espectral validado (0,469 e 0,323).**
-  Esta correção altera a tabela de alocação de orçamento do manuscrito; a conclusão
-  qualitativa é preservada e reforçada.
-- `wearable_fusion.py` — reescrito. A análise de componentes agora reporta a
-  discordância entre quatro pré-processamentos defensáveis, em vez de escolher um.
-  Acrescentada auditoria do viés de interpolação, executável sem dados
-  (`--audit-only`).
+### Reproducibility corrections
+- Submission-grade theoretical grids default to 500 Monte Carlo replicates where applicable.
+- Removed environment-specific output paths.
+- Added portable result paths across scripts.
+- Corrected HYPERAKTIV labeling to use `patient_info.csv`; unresolved labels are never guessed.
+- Actigraphy analyses now save tables used to determine current sample sizes.
+- Rebuilt `make_figures.py` to implement all five current Article 1 figures with current numbering.
+- Added `audit_consistency.py` for static and numerical smoke testing.
+- Updated README so claim-to-code mappings no longer cite superseded power numbers or stale figure/table numbering.
 
-## v1.0.0
-- Versão inicial.
-
-## v1.1.1
-
-### Adicionado
-- `budget_allocation.py` — reproduz as Tabelas 9 (sensibilidade da suposição
-  FSS ≈ confiabilidade; analítica) e 17 (alocação de esforço de pesquisa; simulação).
-  Ambas eram computadas ad hoc e não tinham script correspondente. A Tabela 17
-  sustenta a afirmação prática central do manuscrito.
-
-### Nota de reprodutibilidade
-- Os valores da Tabela 17 no manuscrito correspondem exatamente à saída de
-  `budget_allocation.py --table 17` com semente 2026 e 60 réplicas. São estimativas
-  de Monte Carlo, sujeitas a variação de 0,02 a 0,05 nesse número de réplicas.
+### Consequence for the manuscript
+The masking mechanism remains reproducible. Exact claims that empirical SSF implies a fixed attenuation, zero power, or a specific gain from repairing instruments must be replaced by the audited sensitivity analyses before submission.
