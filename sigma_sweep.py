@@ -1,46 +1,16 @@
-import warnings, sys, time; warnings.filterwarnings("ignore")
-import numpy as np, pandas as pd
-import h4_frontier as H
-from registered_test_power import phase_randomize, _corr, N_SUBJ, N_OBS, SPAN, R_X_REAL, R_Y_REAL
-
-_xd = H.e2(np.linspace(0, H.CYCLE_LEN, 400, endpoint=False))
-
-def sim(rng, sb, sigma_state, R_x, R_y):
-    b = rng.normal(H.DA_OPT - H.K_GAIN*H._E2_MEAN, sb, N_SUBJ)
-    offs = rng.uniform(0, H.CYCLE_LEN, N_SUBJ)
-    Xs, Ys, r_true = [], [], []
-    for i in range(N_SUBJ):
-        days = np.sort(rng.choice(np.arange(SPAN), N_OBS, replace=False)).astype(float)
-        xt = H.e2(days + offs[i])
-        sig = H.inverted_u(b[i] + H.K_GAIN*xt)
-        yt = sig + rng.normal(0, sigma_state, N_OBS)
-        # TRUE coupling of this person: her own signal+state, densely, no instrument noise
-        sig_d = H.inverted_u(b[i] + H.K_GAIN*_xd)
-        yd = sig_d + rng.normal(0, sigma_state, len(_xd))
-        r_true.append(_corr(_xd, yd))
-        sdy = np.sqrt(max(yt.var(),1e-12)*(1-R_y)/R_y)
-        sdx = np.sqrt(max(xt.var(),1e-12)*(1-R_x)/R_x)
-        Ys.append(yt + rng.normal(0, sdy, N_OBS))
-        Xs.append(xt + rng.normal(0, sdx, N_OBS))
-    return Xs, Ys, np.array(r_true)
-
-def surrogate_p(Xs, Ys, rng, B=100):
-    S_obs = np.std([_corr(x,y) for x,y in zip(Xs,Ys)])
-    S = np.array([np.std([_corr(phase_randomize(x,rng), y) for x,y in zip(Xs,Ys)]) for _ in range(B)])
-    return (1 + int(np.sum(S >= S_obs))) / (B+1)
-
-if __name__ == "__main__":
-    states = [float(s) for s in sys.argv[1].split(",")]
-    rng = np.random.default_rng(41); rows=[]; t0=time.time()
-    for ss in states:
-        for sb in [0.04, 0.075, 0.12, 0.20]:
-            rej=0; med=[]
-            for _ in range(25):
-                Xs,Ys,rt = sim(rng, sb, ss, R_X_REAL, R_Y_REAL)
-                rej += (surrogate_p(Xs,Ys,rng,B=100) < 0.05)
-                med.append(np.median(np.abs(rt)))
-            mr = float(np.mean(med))
-            rows.append(dict(sigma_state=ss, sigma_b=sb, median_true_r=mr, power=rej/25))
-            print(f"  SIGMA_STATE={ss:.3f} sigma_b={sb:.3f} -> median true |r|={mr:.3f}  power={rej/25:.2f}", flush=True)
-    pd.DataFrame(rows).to_csv(f"/home/claude/sweep_{states[0]}.csv", index=False)
-    print(f"[{time.time()-t0:.0f}s]")
+#!/usr/bin/env python3
+"""Sensitivity analysis over heterogeneity and the unidentified E2-coupled smooth share q."""
+import argparse,os
+import numpy as np,pandas as pd
+from registered_test_power import simulate_study,surrogate_test,SSF_X,SSF_Y
+def main():
+    ap=argparse.ArgumentParser(); ap.add_argument('--q',default='0.05,0.10,0.25,0.50,0.75,1.00'); ap.add_argument('--sigma',default='0.04,0.075,0.12,0.20'); ap.add_argument('--reps',type=int,default=100); ap.add_argument('--surr',type=int,default=199); ap.add_argument('--seed',type=int,default=41); ap.add_argument('--out-dir',default='./results'); a=ap.parse_args(); os.makedirs(a.out_dir,exist_ok=True)
+    rng=np.random.default_rng(a.seed); rows=[]
+    for q in [float(v) for v in a.q.split(',')]:
+        for sb in [float(v) for v in a.sigma.split(',')]:
+            rej=0; spread=[]
+            for _ in range(a.reps):
+                rec=simulate_study(rng,sb,coupled_fraction=q); p,s,_=surrogate_test(rec,rng,B=a.surr); rej+=p<.05; spread.append(s)
+            rows.append(dict(q=q,sigma_b=sb,power=rej/a.reps,mean_SD_ri=np.mean(spread),target_ssf_predictor=SSF_X,target_ssf_outcome=SSF_Y,reps=a.reps,surrogates=a.surr)); print(f'q={q:.2f} sigma_b={sb:.3f} -> power={rej/a.reps:.3f}')
+    path=f'{a.out_dir}/q_sigma_sensitivity.csv'; pd.DataFrame(rows).to_csv(path,index=False); print(f'[saved] {path}')
+if __name__=='__main__': main()
