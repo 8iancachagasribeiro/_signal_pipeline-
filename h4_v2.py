@@ -1,134 +1,78 @@
 #!/usr/bin/env python3
+"""Design and instrument-quality sensitivity with predictor and outcome SSF.
+
+Empirical SSF is not injected as psychometric reliability. Predictor and outcome series
+are calibrated to requested spectral SSF. Outcome SSF does not identify how much smooth
+variance is attributable to E2, so ``coupled_fraction`` q is explicit and results are
+sensitivity analyses rather than point estimates of empirical power.
 """
-H4 v2 - Design frontier WITH PREDICTOR NOISE.
-
-The mcPHASES analysis (TODO 1) exposed a structural limitation of the original H4 grid:
-it assumed the predictor (E2) was measured without error. In reality, at-home urine E3G
-carries only ~.58 smooth signal. Because attenuation is MULTIPLICATIVE,
-
-        r_observed = r_true * sqrt( R_x * R_y )
-
-predictor quality enters the frontier on equal footing with outcome quality. The original
-grid therefore OVERSTATES achievable recovery and would prescribe an under-powered design.
-
-This script:
-  (1) re-computes the frontier over  density x R_outcome x R_predictor
-  (2) answers the question a real researcher planning a study actually asks:
-      GIVEN A FIXED BUDGET, where does the next unit of effort buy the most recovery -
-      more measurements, a better outcome instrument, or a better hormone assay?
-"""
-import warnings, sys, time
-warnings.filterwarnings("ignore")
-import numpy as np
-import pandas as pd
-
+from __future__ import annotations
+import argparse, os, warnings
+warnings.filterwarnings('ignore')
+import numpy as np, pandas as pd
 import h4_frontier as H
 from run_h4 import within_r_matrix
-from fastlrt import lrt_random_slope_fast
+from fastlrt import lrt_random_slope_varying_x
+from ssf_estimators import ssf_spectral
+from ssf_power import add_white_noise_for_estimated_ssf,smooth_nuisance,_standardize
+N_SUBJ=42; SEED=17
+_XD=H.e2(np.linspace(0,H.CYCLE_LEN,400,endpoint=False))
 
-N_SUBJ = 42
-N_SIMS = 60
-SEED = 17
+def true_coupling(b): return within_r_matrix(H.inverted_u(b[:,None]+H.K_GAIN*_XD[None,:]),_XD)
 
-_xd = H.e2(np.linspace(0, H.CYCLE_LEN, 400, endpoint=False))
+def simulate(rng,n_obs,n_cycles,ssf_x,ssf_y,sigma_b,coupled_fraction,n_subj=N_SUBJ):
+    span=int(np.ceil(H.CYCLE_LEN*n_cycles))
+    days=np.linspace(0,H.CYCLE_LEN*n_cycles,n_obs,endpoint=False) if n_obs>span else np.sort(rng.choice(np.arange(span),size=n_obs,replace=False)).astype(float)
+    x_true=H.e2(days); b=rng.normal(H.DA_OPT-H.K_GAIN*H._E2_MEAN,sigma_b,n_subj)
+    Y=np.empty((n_subj,len(days))); X=np.empty_like(Y)
+    for i in range(n_subj):
+        mech=H.inverted_u(b[i]+H.K_GAIN*x_true); m=_standardize(mech); z=smooth_nuisance(len(days),rng)
+        smooth_y=_standardize(np.sqrt(coupled_fraction)*m+np.sqrt(1-coupled_fraction)*z)
+        Y[i]=add_white_noise_for_estimated_ssf(smooth_y,ssf_y,rng,ssf_spectral)
+        X[i]=add_white_noise_for_estimated_ssf(x_true,ssf_x,rng,ssf_spectral)
+    return Y,X,b
 
-
-def true_coupling(b):
-    return within_r_matrix(H.inverted_u(b[:, None] + H.K_GAIN * _xd[None, :]), _xd)
-
-
-def simulate(rng, n_obs, n_cycles, R_x, R_y, sigma_b, n_subj=N_SUBJ):
-    """n_obs = TOTAL paired observations per person, spread over n_cycles."""
-    span = H.CYCLE_LEN * n_cycles
-    days = np.sort(rng.choice(np.arange(int(span)), size=min(n_obs, int(span)),
-                              replace=False)).astype(float)
-    x_true = H.e2(days)
-    b = rng.normal(H.DA_OPT - H.K_GAIN * H._E2_MEAN, sigma_b, n_subj)
-    sig = H.inverted_u(b[:, None] + H.K_GAIN * x_true[None, :])
-    y_true = sig + rng.normal(0, H.SIGMA_STATE, sig.shape)
-    # outcome instrument noise
-    sdy = np.sqrt(max(y_true.var(), 1e-12) * (1 - R_y) / R_y)
-    y_obs = y_true + rng.normal(0, sdy, y_true.shape)
-    # PREDICTOR instrument noise  <-- the correction the real data forced
-    sdx = np.sqrt(max(x_true.var(), 1e-12) * (1 - R_x) / R_x)
-    x_obs = x_true + rng.normal(0, sdx, x_true.shape)
-    return y_obs, x_obs, b
-
-
-def eval_cell(rng, n_obs, n_cycles, R_x, R_y, sigma_b, n_sims=N_SIMS):
-    """Returns (power_dual, power_lrt, fidelity, median_obs_r)."""
-    dual = lrt = 0
-    fid, medr = [], []
+def eval_cell(rng,n_obs,n_cycles,ssf_x,ssf_y,sigma_b,coupled_fraction,n_sims=200):
+    dual=lrt=0; fid=[]; medr=[]
     for _ in range(n_sims):
-        yo, xo, b = simulate(rng, n_obs, n_cycles, R_x, R_y, sigma_b)
-        rh = within_r_matrix(yo, xo)
-        rt = true_coupling(b)
-        prop = float(np.nanmean(np.abs(rh) > 0.20))
-        p = lrt_random_slope_fast(yo, xo)
+        yo,xo,b=simulate(rng,n_obs,n_cycles,ssf_x,ssf_y,sigma_b,coupled_fraction)
+        rh=np.array([np.corrcoef(xo[i],yo[i])[0,1] for i in range(len(yo))]); rt=true_coupling(b)
+        prop=float(np.nanmean(np.abs(rh)>.20)); p=lrt_random_slope_varying_x(yo,xo)
         if np.isfinite(p):
-            if p < 0.05:
-                lrt += 1
-                if prop > 0.50:
-                    dual += 1
-        m = np.isfinite(rh) & np.isfinite(rt)
-        if m.sum() > 3 and np.std(rh[m]) > 1e-9 and np.std(rt[m]) > 1e-9:
-            fid.append(np.corrcoef(rh[m], rt[m])[0, 1])
+            if p<.05:
+                lrt+=1
+                if prop>.50: dual+=1
+        m=np.isfinite(rh)&np.isfinite(rt)
+        if m.sum()>3 and np.std(rh[m])>1e-9 and np.std(rt[m])>1e-9: fid.append(np.corrcoef(rh[m],rt[m])[0,1])
         medr.append(np.nanmedian(np.abs(rh)))
-    return (dual / n_sims, lrt / n_sims,
-            float(np.mean(fid)) if fid else np.nan,
-            float(np.mean(medr)))
+    return dual/n_sims,lrt/n_sims,float(np.mean(fid)) if fid else np.nan,float(np.mean(medr))
 
+def instrument_grid(rng,n_sims,q_grid):
+    rows=[]
+    for q in q_grid:
+        for sb in [.10,.20]:
+            for sx in [.35,.469,.60,.75,.90]:
+                for sy in [.25,.323,.50,.70,.90]:
+                    d,l,f,mr=eval_cell(rng,85,3,sx,sy,sb,q,n_sims)
+                    rows.append(dict(coupled_fraction=q,sigma_b=sb,ssf_predictor=sx,ssf_outcome=sy,n_obs=85,n_cycles=3,dual_rate=d,lrt_rate=l,fidelity=f,median_abs_r=mr))
+                    print(f'q={q:.2f} sb={sb:.2f} SSFx={sx:.3f} SSFy={sy:.3f} dual={d:.2f} fid={f:.2f}',flush=True)
+    return pd.DataFrame(rows)
+
+def budget_sensitivity(rng,n_sims,q_grid):
+    px,py=.469,.323
+    scenarios=[('baseline 85 obs / 3 cycles',px,py,85,3),('2x observations / 6 cycles',px,py,170,6),('4x observations / 12 cycles',px,py,340,12),('improve outcome SSF to .70',px,.70,85,3),('improve predictor SSF to .70',.70,py,85,3),('improve both SSF to .70',.70,.70,85,3),('improve both SSF to .90',.90,.90,85,3)]
+    rows=[]
+    for q in q_grid:
+        for name,sx,sy,nobs,ncyc in scenarios:
+            d,l,f,mr=eval_cell(rng,nobs,ncyc,sx,sy,.15,q,n_sims)
+            rows.append(dict(coupled_fraction=q,scenario=name,ssf_predictor=sx,ssf_outcome=sy,n_obs=nobs,n_cycles=ncyc,dual_rate=d,lrt_rate=l,fidelity=f,median_abs_r=mr))
+            print(f'q={q:.2f} {name}: dual={d:.2f}, fidelity={f:.2f}')
+    return pd.DataFrame(rows)
 
 def main():
-    mode = sys.argv[1] if len(sys.argv) > 1 else "grid"
-    rng = np.random.default_rng(SEED)
-    t0 = time.time()
-
-    if mode == "grid":
-        # frontier over R_predictor x R_outcome, at realistic density (mcPHASES-like)
-        Rx = [0.40, 0.55, 0.58, 0.70, 0.85, 0.99]
-        Ry = [0.40, 0.55, 0.70, 0.85, 0.99]
-        rows = []
-        for sb in [0.10, 0.20]:
-            for rx in Rx:
-                for ry in Ry:
-                    d, l, f, mr = eval_cell(rng, 74, 3, rx, ry, sb)
-                    rows.append(dict(sigma_b=sb, R_predictor=rx, R_outcome=ry,
-                                     n_obs=74, power_dual=d, power_lrt=l,
-                                     fidelity=f, median_obs_r=mr,
-                                     attenuation=np.sqrt(rx * ry)))
-                    print(f"sb={sb} Rx={rx:.2f} Ry={ry:.2f} -> dual={d:.2f} "
-                          f"lrt={l:.2f} fid={f:.2f} atten={np.sqrt(rx*ry):.2f}", flush=True)
-        pd.DataFrame(rows).to_csv("/mnt/user-data/outputs/h4v2_predictor_grid.csv", index=False)
-
-    elif mode == "budget":
-        # THE BUDGET QUESTION: starting from the mcPHASES design, which upgrade buys most?
-        base = dict(n_obs=74, n_cycles=3, R_x=0.58, R_y=0.41)
-        scenarios = {
-            "mcPHASES as-built":                dict(base),
-            "2x measurements (148 obs)":        dict(base, n_obs=148, n_cycles=6),
-            "4x measurements (296 obs)":        dict(base, n_obs=296, n_cycles=11),
-            "better OUTCOME (R_y .41->.85)":    dict(base, R_y=0.85),
-            "better PREDICTOR (R_x .58->.85)":  dict(base, R_x=0.85),
-            "better BOTH instruments":          dict(base, R_x=0.85, R_y=0.85),
-            "better both + 2x measurements":    dict(base, R_x=0.85, R_y=0.85, n_obs=148, n_cycles=6),
-        }
-        print(f"{'scenario':>34} {'atten':>7} {'power':>7} {'fidelity':>9} {'med |r_obs|':>12}")
-        print("-" * 76)
-        rows = []
-        for name, cfg in scenarios.items():
-            d, l, f, mr = eval_cell(rng, cfg["n_obs"], cfg["n_cycles"],
-                                    cfg["R_x"], cfg["R_y"], 0.15)
-            at = np.sqrt(cfg["R_x"] * cfg["R_y"])
-            print(f"{name:>34} {at:>7.2f} {d:>7.2f} {f:>9.2f} {mr:>12.3f}")
-            rows.append(dict(scenario=name, **cfg, attenuation=at,
-                             power_dual=d, power_lrt=l, fidelity=f, median_obs_r=mr))
-        pd.DataFrame(rows).to_csv("/mnt/user-data/outputs/h4v2_budget.csv", index=False)
-        print()
-        print("sigma_b fixed at 0.15 (moderate heterogeneity). Power = preregistered dual criterion.")
-
-    print(f"\n[{time.time()-t0:.0f}s]")
-
-
-if __name__ == "__main__":
-    main()
+    ap=argparse.ArgumentParser(); ap.add_argument('mode',nargs='?',default='grid',choices=['grid','budget']); ap.add_argument('--n-sims',type=int,default=200); ap.add_argument('--q',default='0.10,0.25,0.50,0.75,1.00'); ap.add_argument('--seed',type=int,default=SEED); ap.add_argument('--out-dir',default='./results')
+    a=ap.parse_args(); os.makedirs(a.out_dir,exist_ok=True); rng=np.random.default_rng(a.seed); qs=[float(v) for v in a.q.split(',')]
+    if a.mode=='grid': instrument_grid(rng,a.n_sims,qs).to_csv(f'{a.out_dir}/h4v2_ssf_sensitivity_grid.csv',index=False)
+    else: budget_sensitivity(rng,a.n_sims,qs).to_csv(f'{a.out_dir}/budget_sensitivity.csv',index=False)
+    print('\nThese are sensitivity analyses over q, not point estimates of empirical power.')
+if __name__=='__main__': main()
