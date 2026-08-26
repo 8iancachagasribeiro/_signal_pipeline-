@@ -5,6 +5,10 @@ This repository contains the simulation and empirical-analysis pipeline supporti
 
 The third quantity is not identified by SSF alone. The pipeline therefore no longer reports one value called “power with the real instruments.” Power based on empirical SSF is a **sensitivity analysis** over `q`, the share of smooth outcome variance attributable to the E2-coupled mechanism.
 
+## Repository scope
+
+The root directory contains the **canonical manuscript reproduction pipeline**. Derived outputs are kept under `results/` and dated audit outputs under `audit_results/`. Exploratory or superseded development scripts are retained under `archive/` for provenance and are **not part of the canonical reproduction order** unless explicitly referenced below.
+
 ## Environment
 
 Tested with Python 3.12.
@@ -106,7 +110,7 @@ q = share of smooth outcome variance attributable to the E2-coupled mechanism
 
 Phase randomization requires a regular time axis. Earlier code compacted missing paired days before the FFT. The audited code places the predictor on its integer-day calendar first, fills gaps only to construct the surrogate spectrum, randomizes phases on that regular grid, and samples the surrogate back at the originally observed days. Outcome observations are never invented.
 
-Because this changes the surrogate null, empirical p-values must be regenerated from the credentialed mcPHASES data before submission.
+The corrected empirical analyses were regenerated from the credentialed mcPHASES archive during the 2026-08-24 audit. The derived non-identifying results and methodological consequences are documented in `audit_results/2026-08-24/` and `CHANGELOG.md`.
 
 ## Actigraphy replication
 
