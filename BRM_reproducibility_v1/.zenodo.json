@@ -1,0 +1,27 @@
+{
+  "title": "BRM reproducibility package: From Group Nulls to Person-Specific Recovery",
+  "description": "Versioned reproducibility package for the methodological manuscript From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research. The release contains simulation code, deterministic seed maps, canonical Monte Carlo outputs, manuscript tables, figure-generation code, figures, environment information, and validation utilities. Restricted mcPHASES data are not redistributed.",
+  "creators": [
+    {
+      "name": "Ribeiro, Bianca Chagas",
+      "affiliation": "NeuroPredict.OS Inova Simples (I.S.)"
+    }
+  ],
+  "license": "agpl-3.0",
+  "upload_type": "software",
+  "keywords": [
+    "person-specific inference",
+    "intensive longitudinal data",
+    "Monte Carlo simulation",
+    "recovery fidelity",
+    "time-series measurement",
+    "smooth-signal fraction"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://osf.io/ewyp7",
+      "relation": "isSupplementTo",
+      "resource_type": "other"
+    }
+  ]
+}
