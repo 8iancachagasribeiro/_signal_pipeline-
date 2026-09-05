@@ -18,14 +18,14 @@ These versioned materials, rather than older root-level development scripts or f
 The canonical package contains:
 
 - a 400-cell robustness grid with 1,000 Monte Carlo replications per cell;
-- a 384-cell sampling-design grid with 1,000 replications per cell;
+- a 384-cell sampling-design grid with 1,000 Monte Carlo replications per cell;
 - an SSF benchmark based on 72 simulation cells and eight estimator variants, yielding 576 method-by-condition rows;
 - a 31-cell phase-randomized surrogate calibration/power study with 1,000 Monte Carlo replications and 199 surrogates per test;
 - deterministic seed maps, environment information, summary tables, six manuscript figures, and validation utilities.
 
 Release asset: `BRM_reproducibility_v1_v1.0.1.zip`
 
-SHA-256: `eac12cfe0a5026c1e0ac6b2aaa193858362be897a9968633cd919bfbb180dc23`
+The current release checksum is recorded in `BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt`.
 
 Run the package validator after extraction with:
 
@@ -36,13 +36,13 @@ python validate_brm_outputs.py --root .
 
 The validator checks the canonical row counts, replication counts, and key manuscript numerical anchors.
 
-## Analysis-plan materials and transparency
+## OSF project and transparency
 
-The public OSF project containing the analysis-plan materials is:
+The public OSF project associated with the study is:
 
 https://osf.io/4u6dk/
 
-The manuscript distinguishes analyses specified in the initial analysis plan from subsequent simulation-based robustness and methodological validation analyses. This repository does not characterize the OSF project itself as a formal immutable preregistration unless a separate timestamped OSF Registration is documented.
+The OSF project provides project-level study materials and transparency information. The canonical executable reproducibility materials are the versioned GitHub Release and source snapshot linked above.
 
 ## Effect-size notation
 
