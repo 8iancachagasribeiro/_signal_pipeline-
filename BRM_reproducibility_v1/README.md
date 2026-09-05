@@ -1,22 +1,20 @@
-# BRM reproducibility package v1.0.0
+# BRM reproducibility package v1.0.1 candidate
 
-Release-ready repository companion for **From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research**.
+Repository companion for **From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research**.
 
 ## Open practices
 
-- Preregistration: https://osf.io/ewyp7
+- Analysis-plan materials: https://osf.io/4u6dk/
 - Repository: https://github.com/8iancachagasribeiro/_signal_pipeline-
-- BRM branch: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-methodological-expansion
-- Planned release tag: `brm-v1.0.0`
-- Permanent Zenodo DOI: to be assigned after archiving the GitHub release.
+- Corrected candidate branch: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1-candidate
+- Planned corrected release tag: `brm-v1.0.1`
+- Permanent Zenodo DOI: not assigned in this candidate metadata
 
-The expanded robustness and validation analyses are post-preregistration methodological analyses and are explicitly distinguished from preregistered analyses.
+The manuscript distinguishes analyses specified in the initial analysis plan from subsequent simulation-based robustness and methodological validation analyses. The OSF project is not described here as a formal preregistration unless a separate timestamped, immutable OSF Registration is documented.
 
 ## Distribution model
 
-This GitHub folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The full canonical Monte Carlo CSVs and publication-ready figures are distributed in the validated release asset **`BRM_reproducibility_v1.zip`**, whose SHA-256 is recorded in `RELEASE_ASSET_SHA256.txt`.
-
-The release asset is the immutable archival snapshot to attach to the GitHub Release and deposit in Zenodo. Keeping the large derived outputs in the release asset avoids duplicating generated data in Git history while preserving a hash-verifiable research record.
+This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The canonical Monte Carlo outputs and publication figures belong to the validated release asset `BRM_reproducibility_v1.zip`; its checksum is recorded in `RELEASE_ASSET_SHA256.txt`.
 
 ## Canonical analyses
 
@@ -28,18 +26,14 @@ The release asset is the immutable archival snapshot to attach to the GitHub Rel
 6. `make_brm_outputs.py`: rebuilds summary tables plus PNG/SVG figures from canonical CSVs.
 7. `validate_brm_outputs.py`: checks canonical row counts, replication counts, and manuscript numerical anchors.
 
-## Validate the release asset
+## Validate the package
 
 ```bash
-sha256sum -c RELEASE_ASSET_SHA256.txt
-unzip BRM_reproducibility_v1.zip
-cd BRM_reproducibility_v1
 python -m py_compile *.py
 python validate_brm_outputs.py --root .
-sha256sum -c SHA256SUMS.txt
 ```
 
-The final local release archive passed all four checks before synchronization.
+For an archival ZIP, also verify its documented SHA-256 and the internal `SHA256SUMS.txt` before release.
 
 ## Data access
 
@@ -50,8 +44,9 @@ Raw mcPHASES data are not redistributed because access is credentialed through P
 - Recovery fidelity measures preservation of individual ordering, not absolute magnitude agreement.
 - SSF is a smooth-signal availability diagnostic, not classical reliability.
 - The phase-randomized surrogate test detects excess coupling dispersion relative to the implemented temporal null and is not a universal random-slope variance-component test under arbitrary homogeneous nonzero effects.
-- The Haar comparator is the specified NumPy implementation included here, not the full wavelet-method family.
+- The Haar comparator is the specified implementation included here, not the full wavelet-method family.
+- Correlation-derived standardized effects are reported as Cohen's d-equivalent values; no Hedges' g small-sample correction is applied.
 
 ## License
 
-Repository-level license: GNU Affero General Public License v3.0. See the repository root `LICENSE` and `LICENSE_NOTICE.md`.
+Repository-level license: GNU Affero General Public License v3.0.
