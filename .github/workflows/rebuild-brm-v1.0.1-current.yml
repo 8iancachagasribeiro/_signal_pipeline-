@@ -1,0 +1,140 @@
+name: Rebuild BRM v1.0.1 current release
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/rebuild-brm-v1.0.1-current.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out current canonical branch
+        uses: actions/checkout@v4
+        with:
+          ref: brm-v1.0.1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: BRM_reproducibility_v1/requirements.txt
+
+      - name: Rebuild validated archival asset from current canonical metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf stage verify current.zip BRM_reproducibility_v1_v1.0.1.zip
+          mkdir -p stage
+          gh release download brm-v1.0.1 \
+            --pattern 'BRM_reproducibility_v1_v1.0.1.zip' \
+            --output current.zip
+          unzip -q current.zip -d stage
+
+          rsync -a BRM_reproducibility_v1/ stage/BRM_reproducibility_v1/ \
+            --exclude RELEASE_ASSET_SHA256.txt \
+            --exclude results/
+          cp BRM_reproducibility_v1/results/README.md stage/BRM_reproducibility_v1/results/README.md
+
+          if grep -RInEi 'analysis[- ]plan|initial analysis plan|preregistr|Registered Analysis Plan|preregistration_OSF|historical_analysis_plan' \
+              stage/BRM_reproducibility_v1 --exclude='*.pyc' --exclude='SHA256SUMS.txt'; then
+            echo 'Obsolete OSF plan-status wording remains in the archival package.' >&2
+            exit 1
+          fi
+
+          python -m pip install -r stage/BRM_reproducibility_v1/requirements.txt
+          python -m py_compile stage/BRM_reproducibility_v1/*.py
+          python stage/BRM_reproducibility_v1/validate_brm_outputs.py --root stage/BRM_reproducibility_v1
+
+          (
+            cd stage/BRM_reproducibility_v1
+            rm -f SHA256SUMS.txt
+            find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+            sha256sum -c SHA256SUMS.txt
+          )
+
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          root = Path('stage/BRM_reproducibility_v1')
+          out = Path('BRM_reproducibility_v1_v1.0.1.zip')
+          stamp = (2026, 9, 5, 0, 0, 0)
+          with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+              root_info = zipfile.ZipInfo('BRM_reproducibility_v1/', stamp)
+              root_info.external_attr = (0o40755 << 16) | 0x10
+              zf.writestr(root_info, b'')
+              for p in sorted(root.rglob('*'), key=lambda x: x.as_posix()):
+                  arc = 'BRM_reproducibility_v1/' + p.relative_to(root).as_posix()
+                  if p.is_dir():
+                      info = zipfile.ZipInfo(arc.rstrip('/') + '/', stamp)
+                      info.external_attr = (0o40755 << 16) | 0x10
+                      zf.writestr(info, b'')
+                  else:
+                      info = zipfile.ZipInfo(arc, stamp)
+                      mode = 0o755 if p.suffix == '.py' else 0o644
+                      info.external_attr = (0o100000 | mode) << 16
+                      zf.writestr(info, p.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+          PY
+
+          unzip -t BRM_reproducibility_v1_v1.0.1.zip
+          mkdir verify
+          unzip -q BRM_reproducibility_v1_v1.0.1.zip -d verify
+          python verify/BRM_reproducibility_v1/validate_brm_outputs.py --root verify/BRM_reproducibility_v1
+          (cd verify/BRM_reproducibility_v1 && sha256sum -c SHA256SUMS.txt)
+
+          SHA=$(sha256sum BRM_reproducibility_v1_v1.0.1.zip | awk '{print $1}')
+          echo "ASSET_SHA=$SHA" >> "$GITHUB_ENV"
+          printf '%s  %s\n' "$SHA" 'BRM_reproducibility_v1_v1.0.1.zip' > BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt
+
+      - name: Commit final checksum and remove this one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/rebuild-brm-v1.0.1-current.yml
+          git add BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt .github/workflows/rebuild-brm-v1.0.1-current.yml
+          git commit -m 'Finalize BRM v1.0.1 OSF metadata cleanup and checksum'
+          git push origin HEAD:brm-v1.0.1
+          echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Replace published release with clean current snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Reproducibility snapshot for *From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research*.
+
+          This v1.0.1 release contains the submission-aligned reproducibility materials for the current Behavior Research Methods manuscript.
+
+          The package includes the audited reference mechanism; a 400-cell robustness grid with 1,000 Monte Carlo replications per cell; a 384-cell sampling-design grid with 1,000 replications per cell; an SSF benchmark across 72 simulation cells and eight estimator variants; phase-randomized surrogate calibration and power analyses; deterministic seed maps; canonical result CSVs; six figures; and validation utilities.
+
+          Public OSF project: https://osf.io/4u6dk/
+
+          Raw mcPHASES data are not redistributed because PhysioNet access is credentialed.
+
+          Release asset: BRM_reproducibility_v1_v1.0.1.zip
+
+          SHA-256: ${ASSET_SHA}
+          EOF
+
+          gh release delete brm-v1.0.1 --cleanup-tag --yes
+          gh release create brm-v1.0.1 \
+            BRM_reproducibility_v1_v1.0.1.zip \
+            --target "$RELEASE_TARGET" \
+            --title 'BRM Reproducibility Package v1.0.1' \
+            --notes-file release-notes.md \
+            --verify-tag=false
