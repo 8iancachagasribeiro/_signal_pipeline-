@@ -1,0 +1,151 @@
+name: Publish BRM v1.0.1 release
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/publish-brm-v1.0.1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out canonical branch
+        uses: actions/checkout@v4
+        with:
+          ref: brm-v1.0.1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: BRM_reproducibility_v1/requirements.txt
+
+      - name: Rebuild corrected release package from validated v1.0.0 asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf stage BRM_reproducibility_v1_v1.0.1.zip old.zip
+          mkdir -p stage
+          curl -fL --retry 3 \
+            https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/download/brm-v1.0.0/BRM_reproducibility_v1.zip \
+            -o old.zip
+          unzip -q old.zip -d stage
+
+          # Overlay the corrected v1.0.1 code and metadata while preserving the
+          # full validated CSV/figure payload that is intentionally not duplicated
+          # in Git history.
+          rsync -a BRM_reproducibility_v1/ stage/BRM_reproducibility_v1/ \
+            --exclude RELEASE_ASSET_SHA256.txt \
+            --exclude results/
+          cp BRM_reproducibility_v1/results/README.md stage/BRM_reproducibility_v1/results/README.md
+
+          # Refuse to publish if any superseded destination survives in the package.
+          if grep -RInE 'ewyp7|zenodo\.22224443|brm-v1\.0\.0|brm-methodological-expansion|brm-v1\.0\.1-candidate' \
+              stage/BRM_reproducibility_v1 --exclude='*.pyc'; then
+            echo 'Superseded repository destination detected; aborting release.' >&2
+            exit 1
+          fi
+
+          python -m pip install -r stage/BRM_reproducibility_v1/requirements.txt
+          python -m py_compile stage/BRM_reproducibility_v1/*.py
+          python stage/BRM_reproducibility_v1/validate_brm_outputs.py --root stage/BRM_reproducibility_v1
+
+          # Rebuild the internal manifest after metadata correction.
+          (
+            cd stage/BRM_reproducibility_v1
+            find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+            sha256sum -c SHA256SUMS.txt
+          )
+
+          # Deterministic archive: sorted paths and a fixed timestamp.
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          root = Path('stage/BRM_reproducibility_v1')
+          out = Path('BRM_reproducibility_v1_v1.0.1.zip')
+          stamp = (2026, 9, 5, 0, 0, 0)
+          with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+              root_info = zipfile.ZipInfo('BRM_reproducibility_v1/', stamp)
+              root_info.external_attr = (0o40755 << 16) | 0x10
+              zf.writestr(root_info, b'')
+              for p in sorted(root.rglob('*'), key=lambda x: x.as_posix()):
+                  arc = 'BRM_reproducibility_v1/' + p.relative_to(root).as_posix()
+                  if p.is_dir():
+                      info = zipfile.ZipInfo(arc.rstrip('/') + '/', stamp)
+                      info.external_attr = (0o40755 << 16) | 0x10
+                      zf.writestr(info, b'')
+                  else:
+                      info = zipfile.ZipInfo(arc, stamp)
+                      mode = 0o755 if p.suffix == '.py' else 0o644
+                      info.external_attr = (0o100000 | mode) << 16
+                      zf.writestr(info, p.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+          PY
+
+          unzip -t BRM_reproducibility_v1_v1.0.1.zip
+          rm -rf verify
+          mkdir verify
+          unzip -q BRM_reproducibility_v1_v1.0.1.zip -d verify
+          python verify/BRM_reproducibility_v1/validate_brm_outputs.py --root verify/BRM_reproducibility_v1
+          (cd verify/BRM_reproducibility_v1 && sha256sum -c SHA256SUMS.txt)
+
+          SHA=$(sha256sum BRM_reproducibility_v1_v1.0.1.zip | awk '{print $1}')
+          echo "ASSET_SHA=$SHA" >> "$GITHUB_ENV"
+          printf '%s  %s\n' "$SHA" 'BRM_reproducibility_v1_v1.0.1.zip' > BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt
+
+      - name: Record final asset checksum on canonical branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record BRM v1.0.1 release asset checksum'
+            git push origin HEAD:brm-v1.0.1
+          fi
+          echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release and upload validated asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view brm-v1.0.1 >/dev/null 2>&1; then
+            echo 'Release brm-v1.0.1 already exists; refusing to overwrite it.' >&2
+            exit 1
+          fi
+
+          cat > release-notes.md <<EOF
+          Reproducibility snapshot for *From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research*.
+
+          This corrected v1.0.1 release aligns the reproducibility materials with the current Behavior Research Methods manuscript and public project destinations.
+
+          The package includes the audited reference mechanism; a 400-cell robustness grid with 1,000 Monte Carlo replications per cell; a 384-cell sampling-design grid with 1,000 replications per cell; an SSF benchmark across 72 simulation cells and eight estimator variants; phase-randomized surrogate calibration and power analyses; deterministic seed maps; canonical result CSVs; six figures; and validation utilities.
+
+          Public analysis-plan materials: https://osf.io/4u6dk/
+
+          The OSF project is described as analysis-plan materials and is not characterized as a formal immutable preregistration unless a separate timestamped OSF Registration is documented.
+
+          Raw mcPHASES data are not redistributed because PhysioNet access is credentialed.
+
+          **Release asset:** `BRM_reproducibility_v1_v1.0.1.zip`
+
+          **SHA-256:** `${ASSET_SHA}`
+          EOF
+
+          gh release create brm-v1.0.1 \
+            BRM_reproducibility_v1_v1.0.1.zip \
+            --target "$RELEASE_TARGET" \
+            --title 'BRM Reproducibility Package v1.0.1' \
+            --notes-file release-notes.md \
+            --verify-tag=false
