@@ -3,7 +3,9 @@
 ## 2026-09-05 - BRM resubmission audit and canonical-package correction
 
 ### Current canonical BRM state
-- The canonical BRM expansion is `BRM_reproducibility_v1/` on the corrected candidate branch.
+- The canonical BRM expansion is `BRM_reproducibility_v1/` on branch `brm-v1.0.1`.
+- Canonical snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
+- Public analysis-plan materials: https://osf.io/4u6dk/
 - Robustness grid: 400 cells, 1,000 Monte Carlo replications per cell.
 - Sampling-design grid: 384 cells, 1,000 Monte Carlo replications per cell.
 - SSF benchmark: 72 simulation cells x eight estimator variants = 576 method-by-condition rows, with 1,000 replications per simulation cell.
@@ -12,11 +14,11 @@
 - Correlation-derived standardized effects are reported as Cohen's d-equivalent values; no Hedges' g correction is applied.
 
 ### Transparency and repository corrections
-- Corrected the project materials URL to https://osf.io/4u6dk/.
-- Replaced unsupported preregistration wording with analysis-plan wording unless a separate timestamped immutable OSF Registration is documented.
+- Corrected the project materials URL to https://osf.io/4u6dk/ and verified that the submission materials should treat it as analysis-plan material rather than a formal preregistration unless a separate immutable OSF Registration is documented.
 - Removed the inaccessible/incorrect Zenodo DOI from submission materials; a DOI must not be cited until a matching archival deposit is actually published and independently accessible.
-- Prepared corrected `brm-v1.0.1-candidate` metadata for the next versioned release.
+- Finalized corrected `brm-v1.0.1` metadata and repository destinations.
 - Updated the manuscript-facing README, package README, `.zenodo.json`, release notes, citation metadata, and release checklist.
+- The historical `brm-v1.0.0` release is superseded for BRM resubmission purposes because its metadata contained obsolete repository destinations.
 
 ### Superseded historical notes
 The 2026-08-24 audit below documents an earlier development state. References there to 500-replication submission grids and five figures were subsequently superseded by the canonical BRM expansion summarized above.
