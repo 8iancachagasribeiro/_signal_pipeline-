@@ -5,7 +5,11 @@ This repository supports the manuscript **From Group Nulls to Person-Specific Re
 
 ## Canonical BRM reproduction package
 
-The submission-aligned reproducibility package is located in `BRM_reproducibility_v1/`. That folder, rather than older root-level development scripts or files under `archive/`, is the canonical source for the BRM methodological expansion.
+The submission-aligned reproducibility package is located in `BRM_reproducibility_v1/`. The canonical versioned snapshot for the current BRM submission is:
+
+https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
+
+That folder, rather than older root-level development scripts or files under `archive/`, is the canonical source for the BRM methodological expansion.
 
 The canonical package contains:
 
@@ -26,7 +30,7 @@ The validator checks the canonical row counts, replication counts, and key manus
 
 ## Analysis-plan materials and transparency
 
-Analysis-plan materials associated with the project are hosted at:
+The public OSF project containing the analysis-plan materials is:
 
 https://osf.io/4u6dk/
 
@@ -50,4 +54,6 @@ Raw mcPHASES data are not redistributed because PhysioNet access is credentialed
 
 ## Versioning
 
-The branch `brm-v1.0.1-candidate` contains the corrected submission-aligned metadata prepared after the BRM repository-link audit. A permanent DOI should be added to the manuscript only after a matching archival deposit is actually published and independently accessible.
+`brm-v1.0.1` is the corrected submission-aligned branch produced after the BRM link and metadata audit. The historical `brm-v1.0.0` release is superseded for submission purposes because its metadata contained obsolete repository destinations. A permanent Zenodo DOI should be added only after a matching v1.0.1 archival deposit is published and independently accessible.
+
+If a GitHub Release is created for this version, its intended tag is `brm-v1.0.1`.
