@@ -1,0 +1,27 @@
+name: Check obsolete OSF PDF references
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/check-obsolete-osf-pdf-refs.yml
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/heads/brm-v1.0.1
+          fetch-depth: 0
+      - name: Verify obsolete OSF PDF references are absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'preregistration_OSF|historical_analysis_plan|Registered Analysis Plan|Date of registration: 8 July 2026|The averaged individual does not exist: masking of within-person coupling' . \
+              --exclude-dir=.git --exclude-dir=.github; then
+            echo 'Obsolete OSF PDF reference found.' >&2
+            exit 1
+          fi
+          echo 'No obsolete OSF PDF references found in the current branch.'
