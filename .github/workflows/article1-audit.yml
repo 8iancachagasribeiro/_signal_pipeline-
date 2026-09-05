@@ -33,6 +33,7 @@ jobs:
             README.md CHANGELOG.md BRM_reproducibility_v1 \
             --exclude='*.pyc' --exclude-dir='__pycache__'
           grep -R -n 'https://osf.io/4u6dk/' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/.zenodo.json
+          grep -R -n 'releases/tag/brm-v1.0.1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/RELEASE_NOTES.md
           grep -R -n 'tree/brm-v1.0.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/CITATION.cff
       - name: Check canonical metadata files exist
         shell: bash
