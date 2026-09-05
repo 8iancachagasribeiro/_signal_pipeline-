@@ -14,9 +14,9 @@ This corrected version resolves transparency, repository-destination, and versio
 
 ## Corrected destinations and metadata
 
-- public analysis-plan materials: https://osf.io/4u6dk/;
-- canonical v1.0.1 snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1;
-- the OSF project is not labeled as a formal preregistration unless a separate immutable Registration is documented;
+- public OSF project: https://osf.io/4u6dk/;
+- published v1.0.1 GitHub Release: https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1;
+- canonical v1.0.1 source snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1;
 - correlation-derived standardized effects are described as Cohen's d-equivalent values rather than Hedges' g;
 - the package documents 1,000 Monte Carlo replications for the canonical BRM grids and six manuscript figures;
 - no Zenodo DOI is claimed until a matching v1.0.1 archival deposit is published and independently accessible.
