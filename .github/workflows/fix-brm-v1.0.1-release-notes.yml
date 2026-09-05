@@ -1,0 +1,47 @@
+name: Fix BRM v1.0.1 release notes
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/fix-brm-v1.0.1-release-notes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: brm-v1.0.1
+      - name: Update release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(awk '{print $1}' BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt)
+          cat > release-notes.md <<EOF
+          Reproducibility snapshot for *From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research*.
+
+          This corrected v1.0.1 release aligns the reproducibility materials with the current Behavior Research Methods manuscript and public project destinations.
+
+          The package includes the audited reference mechanism; a 400-cell robustness grid with 1,000 Monte Carlo replications per cell; a 384-cell sampling-design grid with 1,000 replications per cell; an SSF benchmark across 72 simulation cells and eight estimator variants; phase-randomized surrogate calibration and power analyses; deterministic seed maps; canonical result CSVs; six figures; and validation utilities.
+
+          Public analysis-plan materials: https://osf.io/4u6dk/
+
+          The OSF project is described as analysis-plan materials and is not characterized as a formal immutable preregistration unless a separate timestamped OSF Registration is documented.
+
+          Raw mcPHASES data are not redistributed because PhysioNet access is credentialed.
+
+          Release asset: BRM_reproducibility_v1_v1.0.1.zip
+
+          SHA-256: ${SHA}
+          EOF
+          gh release edit brm-v1.0.1 \
+            --title 'BRM Reproducibility Package v1.0.1' \
+            --notes-file release-notes.md
