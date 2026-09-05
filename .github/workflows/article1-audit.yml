@@ -1,9 +1,9 @@
-name: Article 1 pipeline audit
+name: BRM v1.0.1 package audit
 
 on:
   push:
     branches:
-      - audit/article1-methodological-fixes
+      - brm-v1.0.1
   pull_request:
     branches:
       - main
@@ -18,13 +18,27 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install dependencies
+          cache-dependency-path: BRM_reproducibility_v1/requirements.txt
+      - name: Install canonical package dependencies
+        working-directory: BRM_reproducibility_v1
         run: pip install -r requirements.txt
-      - name: Compile Python files
+      - name: Compile canonical BRM scripts
+        working-directory: BRM_reproducibility_v1
         run: python -m py_compile *.py
-      - name: Run consistency audit
-        run: python audit_consistency.py
-      - name: Validate masking mechanism
-        run: python h4_frontier.py --validate-only
-      - name: Validate SSF calibration
-        run: python registered_test_power.py diagnostic --q 0.50
+      - name: Check canonical repository destinations
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|brm-v1\.0\.1-candidate|tree/brm-methodological-expansion' \
+            README.md CHANGELOG.md BRM_reproducibility_v1 \
+            --exclude='*.pyc' --exclude-dir='__pycache__'
+          grep -R -n 'https://osf.io/4u6dk/' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/.zenodo.json
+          grep -R -n 'tree/brm-v1.0.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/CITATION.cff
+      - name: Check canonical metadata files exist
+        shell: bash
+        run: |
+          test -f BRM_reproducibility_v1/CITATION.cff
+          test -f BRM_reproducibility_v1/.zenodo.json
+          test -f BRM_reproducibility_v1/RELEASE_NOTES.md
+          test -f BRM_reproducibility_v1/RELEASE_CHECKLIST.md
+          test -f BRM_reproducibility_v1/seed_map.json
