@@ -1,1 +1,1 @@
-2e4a5a4c95564d514950a639fe21ef1e6df413de75f50257ce5a4e0843b3e111  BRM_reproducibility_v1.zip
+PENDING FOR v1.0.1: rebuild BRM_reproducibility_v1.zip from the corrected brm-v1.0.1-candidate contents, compute its SHA-256, and replace this line before publishing the release.
