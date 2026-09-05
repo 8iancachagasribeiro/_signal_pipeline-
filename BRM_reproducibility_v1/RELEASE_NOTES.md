@@ -1,6 +1,6 @@
-# Release notes: v1.0.1-brm candidate
+# Release notes: v1.0.1-brm
 
-This candidate corrects transparency and versioning metadata identified during the BRM resubmission audit while preserving the validated numerical outputs.
+This corrected version resolves transparency, repository-destination, and versioning inconsistencies identified during the BRM resubmission audit while preserving the validated numerical outputs.
 
 ## Included
 
@@ -12,13 +12,14 @@ This candidate corrects transparency and versioning metadata identified during t
 - deterministic seed map and exact execution environment;
 - canonical result CSVs, summary tables, six generated figures, and validation utilities.
 
-## Metadata corrections
+## Corrected destinations and metadata
 
-- analysis-plan materials now point to https://osf.io/4u6dk/;
+- public analysis-plan materials: https://osf.io/4u6dk/;
+- canonical v1.0.1 snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1;
 - the OSF project is not labeled as a formal preregistration unless a separate immutable Registration is documented;
 - correlation-derived standardized effects are described as Cohen's d-equivalent values rather than Hedges' g;
 - the package documents 1,000 Monte Carlo replications for the canonical BRM grids and six manuscript figures;
-- no Zenodo DOI is claimed until a matching archival deposit is actually published and independently accessible.
+- no Zenodo DOI is claimed until a matching v1.0.1 archival deposit is published and independently accessible.
 
 ## Interpretation boundaries
 
