@@ -4,17 +4,17 @@ Repository companion for **From Group Nulls to Person-Specific Recovery: Statist
 
 ## Open practices
 
-- Public analysis-plan materials: https://osf.io/4u6dk/
+- Public OSF project: https://osf.io/4u6dk/
 - Repository: https://github.com/8iancachagasribeiro/_signal_pipeline-
-- Canonical v1.0.1 snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
-- Intended GitHub release tag: `brm-v1.0.1`
+- Published GitHub Release: https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1
+- Canonical v1.0.1 source snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
 - Permanent Zenodo DOI: not assigned for v1.0.1
 
-The manuscript distinguishes analyses specified in the initial analysis plan from subsequent simulation-based robustness and methodological validation analyses. The OSF project is not described here as a formal preregistration unless a separate timestamped, immutable OSF Registration is documented.
+The OSF project provides project-level study materials and transparency information. The executable reproducibility record for the current BRM submission is the versioned GitHub Release and source snapshot above.
 
 ## Distribution model
 
-This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The canonical submission destination is the versioned branch above. If an archival ZIP is published as a GitHub Release or deposited in Zenodo, it must be rebuilt from this v1.0.1 state and assigned a fresh checksum.
+This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The published v1.0.1 GitHub Release contains the complete validated archival ZIP, including full canonical outputs and figures. The release checksum is recorded in `RELEASE_ASSET_SHA256.txt`.
 
 ## Canonical analyses
 
@@ -33,7 +33,7 @@ python -m py_compile *.py
 python validate_brm_outputs.py --root .
 ```
 
-After building any corrected archival ZIP, generate and verify a fresh SHA-256 before publishing it.
+For the published archival ZIP, also validate the internal checksum manifest after extraction.
 
 ## Data access
 
