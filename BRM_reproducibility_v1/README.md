@@ -14,7 +14,7 @@ The manuscript distinguishes analyses specified in the initial analysis plan fro
 
 ## Distribution model
 
-This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The canonical Monte Carlo outputs and publication figures belong to the validated release asset `BRM_reproducibility_v1.zip`; its checksum is recorded in `RELEASE_ASSET_SHA256.txt`.
+This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. Because the v1.0.1 metadata differ from v1.0.0, the archival ZIP must be rebuilt from this corrected candidate before release. `RELEASE_ASSET_SHA256.txt` is intentionally marked pending until that fresh ZIP is generated and hashed; the prior v1.0.0 archive hash must not be reused.
 
 ## Canonical analyses
 
@@ -33,7 +33,7 @@ python -m py_compile *.py
 python validate_brm_outputs.py --root .
 ```
 
-For an archival ZIP, also verify its documented SHA-256 and the internal `SHA256SUMS.txt` before release.
+After building the corrected archival ZIP, generate and verify a fresh SHA-256 before publishing it.
 
 ## Data access
 
