@@ -1,6 +1,6 @@
 {
   "title": "BRM reproducibility package: From Group Nulls to Person-Specific Recovery",
-  "description": "Versioned reproducibility package for the methodological manuscript From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research. The release contains simulation code, deterministic seed maps, canonical Monte Carlo outputs, manuscript tables, figure-generation code, figures, environment information, and validation utilities. Restricted mcPHASES data are not redistributed.",
+  "description": "Versioned reproducibility package for the methodological manuscript From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research. The package contains simulation code, deterministic seed maps, canonical Monte Carlo outputs, manuscript tables, figure-generation code, figures, environment information, and validation utilities. Restricted mcPHASES data are not redistributed.",
   "creators": [
     {
       "name": "Ribeiro, Bianca Chagas",
@@ -19,7 +19,7 @@
   ],
   "related_identifiers": [
     {
-      "identifier": "https://osf.io/ewyp7",
+      "identifier": "https://osf.io/4u6dk/",
       "relation": "isSupplementTo",
       "resource_type": "other"
     }
