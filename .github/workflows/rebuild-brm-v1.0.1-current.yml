@@ -18,7 +18,7 @@ jobs:
       - name: Check out current canonical branch
         uses: actions/checkout@v4
         with:
-          ref: brm-v1.0.1
+          ref: refs/heads/brm-v1.0.1
           fetch-depth: 0
 
       - name: Set up Python
@@ -106,7 +106,7 @@ jobs:
           rm -f .github/workflows/rebuild-brm-v1.0.1-current.yml
           git add BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt .github/workflows/rebuild-brm-v1.0.1-current.yml
           git commit -m 'Finalize BRM v1.0.1 OSF metadata cleanup and checksum'
-          git push origin HEAD:brm-v1.0.1
+          git push origin HEAD:refs/heads/brm-v1.0.1
           echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Replace published release with clean current snapshot
