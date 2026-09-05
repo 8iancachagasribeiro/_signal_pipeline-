@@ -5,11 +5,15 @@ This repository supports the manuscript **From Group Nulls to Person-Specific Re
 
 ## Canonical BRM reproduction package
 
-The submission-aligned reproducibility package is located in `BRM_reproducibility_v1/`. The canonical versioned snapshot for the current BRM submission is:
+The corrected submission-aligned GitHub Release for the current BRM manuscript is:
+
+https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1
+
+The corresponding source snapshot is located in `BRM_reproducibility_v1/` on branch `brm-v1.0.1`:
 
 https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
 
-That folder, rather than older root-level development scripts or files under `archive/`, is the canonical source for the BRM methodological expansion.
+These versioned materials, rather than older root-level development scripts or files under `archive/`, are the canonical source for the BRM methodological expansion.
 
 The canonical package contains:
 
@@ -19,7 +23,11 @@ The canonical package contains:
 - a 31-cell phase-randomized surrogate calibration/power study with 1,000 Monte Carlo replications and 199 surrogates per test;
 - deterministic seed maps, environment information, summary tables, six manuscript figures, and validation utilities.
 
-Run the package validator with:
+Release asset: `BRM_reproducibility_v1_v1.0.1.zip`
+
+SHA-256: `eac12cfe0a5026c1e0ac6b2aaa193858362be897a9968633cd919bfbb180dc23`
+
+Run the package validator after extraction with:
 
 ```bash
 cd BRM_reproducibility_v1
@@ -54,6 +62,4 @@ Raw mcPHASES data are not redistributed because PhysioNet access is credentialed
 
 ## Versioning
 
-`brm-v1.0.1` is the corrected submission-aligned branch produced after the BRM link and metadata audit. The historical `brm-v1.0.0` release is superseded for submission purposes because its metadata contained obsolete repository destinations. A permanent Zenodo DOI should be added only after a matching v1.0.1 archival deposit is published and independently accessible.
-
-If a GitHub Release is created for this version, its intended tag is `brm-v1.0.1`.
+GitHub Release `brm-v1.0.1` is the corrected submission-aligned archival snapshot produced after the BRM link and metadata audit. The historical `brm-v1.0.0` release is superseded for submission purposes because its metadata contained obsolete repository destinations. A permanent Zenodo DOI should be added only after a matching v1.0.1 archival deposit is published and independently accessible.
