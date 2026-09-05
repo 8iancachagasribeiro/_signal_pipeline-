@@ -1,6 +1,6 @@
-# Release notes: v1.0.0-brm
+# Release notes: v1.0.1-brm candidate
 
-This snapshot packages the methodological expansion prepared for submission to *Behavior Research Methods*.
+This candidate corrects transparency and versioning metadata identified during the BRM resubmission audit while preserving the validated numerical outputs.
 
 ## Included
 
@@ -12,12 +12,19 @@ This snapshot packages the methodological expansion prepared for submission to *
 - deterministic seed map and exact execution environment;
 - canonical result CSVs, summary tables, six generated figures, and validation utilities.
 
+## Metadata corrections
+
+- analysis-plan materials now point to https://osf.io/4u6dk/;
+- the OSF project is not labeled as a formal preregistration unless a separate immutable Registration is documented;
+- correlation-derived standardized effects are described as Cohen's d-equivalent values rather than Hedges' g;
+- the package documents 1,000 Monte Carlo replications for the canonical BRM grids and six manuscript figures;
+- no Zenodo DOI is claimed until a matching archival deposit is actually published and independently accessible.
+
 ## Interpretation boundaries
 
 - Recovery fidelity is an ordering metric, not proof of magnitude agreement.
 - SSF is a smooth-signal availability diagnostic, not classical reliability.
 - The phase-randomized surrogate procedure tests excess dispersion relative to its temporal surrogate null and is not a universal random-slope variance-component test under arbitrary nonzero homogeneous effects.
-- Expanded robustness analyses are post-preregistration methodological validation analyses. The preregistration is at https://osf.io/ewyp7.
 
 ## Restricted data
 
