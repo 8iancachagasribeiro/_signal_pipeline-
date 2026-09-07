@@ -1,8 +1,8 @@
 # Release notes: v1.0.1-brm
 
-This corrected version resolves transparency, repository-destination, and versioning inconsistencies identified during the BRM resubmission audit while preserving the validated numerical outputs.
+This corrected version resolves transparency, repository-destination, versioning, and methodological-label inconsistencies identified during the BRM resubmission audit while preserving the validated numerical outputs.
 
-## Included
+## Included in the archival simulation asset
 
 - audited reference model;
 - 400-cell robustness grid, 1,000 Monte Carlo replications per cell;
@@ -12,14 +12,27 @@ This corrected version resolves transparency, repository-destination, and versio
 - deterministic seed map and exact execution environment;
 - canonical result CSVs, summary tables, six generated figures, and validation utilities.
 
+## Empirical source code in the release tag
+
+The tagged repository source additionally includes the audited empirical scripts:
+
+- `mcphases_analyses.py`;
+- `actigraphy_replication.py`;
+- `ssf_estimators.py`.
+
+These scripts begin from the original source archives. Raw mcPHASES participant data are not redistributed because PhysioNet access is credentialed.
+
 ## Corrected destinations and metadata
 
 - public OSF project: https://osf.io/4u6dk/;
-- published v1.0.1 GitHub Release: https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1;
-- canonical v1.0.1 source snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1;
+- canonical release page: https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1;
+- branch-tree URLs are not used as permanent source citations because branches are mutable;
 - correlation-derived standardized effects are described as Cohen's d-equivalent values rather than Hedges' g;
-- the package documents 1,000 Monte Carlo replications for the canonical BRM grids and six manuscript figures;
 - no Zenodo DOI is claimed until a matching v1.0.1 archival deposit is published and independently accessible.
+
+## Statistical-label correction
+
+The complementary ICC produced by the canonical recovery code is a **single-measure consistency ICC, ICC(C,1)**. It is not an absolute-agreement ICC. Recovery fidelity remains an ordering metric, while RMSE and mean bias quantify magnitude error.
 
 ## Interpretation boundaries
 
