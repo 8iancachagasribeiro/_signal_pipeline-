@@ -1,0 +1,108 @@
+name: Clean final BRM v1.0.1 repository tree
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/cleanup-brm-v1.0.1-tree.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out current BRM branch
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/brm-v1.0.1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify source syntax and current release asset before cleanup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          paths=list(Path('BRM_reproducibility_v1').glob('*.py'))+[Path('mcphases_analyses.py'),Path('actigraphy_replication.py'),Path('ssf_estimators.py')]
+          for p in paths:
+              ast.parse(p.read_text(encoding='utf-8'), filename=str(p))
+          print(f'AST PASS: {len(paths)} Python source files parsed.')
+          PY
+          ! grep -n 'effect_g' mcphases_analyses.py
+          ! grep -n 'BALANCED (confirmatory)' mcphases_analyses.py
+          ! grep -n 'surrogate_confirmatory_episode_aware.csv' mcphases_analyses.py
+          grep -n 'abs_d_equivalent' mcphases_analyses.py
+          grep -n 'BALANCED (main empirical)' mcphases_analyses.py
+          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|tree/brm-v1\.0\.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1 \
+            --exclude='*.pyc' --exclude-dir='__pycache__'
+
+          gh release view brm-v1.0.1 --json body -q .body > /tmp/brm-release-notes.md
+          gh release download brm-v1.0.1 --pattern 'BRM_reproducibility_v1_v1.0.1.zip' --output /tmp/brm-release.zip
+          EXPECTED=$(awk '{print $1}' BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt)
+          ACTUAL=$(sha256sum /tmp/brm-release.zip | awk '{print $1}')
+          test "$EXPECTED" = "$ACTUAL"
+          rm -rf /tmp/brm-release-verify
+          mkdir /tmp/brm-release-verify
+          unzip -q /tmp/brm-release.zip -d /tmp/brm-release-verify
+          python -m pip install -q -r /tmp/brm-release-verify/BRM_reproducibility_v1/requirements.txt
+          python /tmp/brm-release-verify/BRM_reproducibility_v1/validate_brm_outputs.py --root /tmp/brm-release-verify/BRM_reproducibility_v1
+          (cd /tmp/brm-release-verify/BRM_reproducibility_v1 && sha256sum -c SHA256SUMS.txt >/dev/null)
+          echo "ASSET_SHA=$ACTUAL" >> "$GITHUB_ENV"
+
+      - name: Remove generated working artifacts from Git history tip
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -r --ignore-unmatch \
+            stage \
+            verify \
+            current.zip \
+            BRM_reproducibility_v1_v1.0.1.zip \
+            __pycache__ \
+            BRM_reproducibility_v1/__pycache__
+          git rm .github/workflows/cleanup-brm-v1.0.1-tree.yml
+          test ! -e stage
+          test ! -e verify
+          test ! -e current.zip
+          test ! -e BRM_reproducibility_v1_v1.0.1.zip
+          test ! -e __pycache__
+          test ! -e BRM_reproducibility_v1/__pycache__
+
+      - name: Commit clean source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Clean generated artifacts from BRM v1.0.1 source tree'
+          git push origin HEAD:refs/heads/brm-v1.0.1
+          echo "CLEAN_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Retarget published release to clean source commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete brm-v1.0.1 --cleanup-tag --yes
+          gh release create brm-v1.0.1 \
+            /tmp/brm-release.zip#BRM_reproducibility_v1_v1.0.1.zip \
+            --target "$CLEAN_TARGET" \
+            --title 'BRM Reproducibility Package v1.0.1' \
+            --notes-file /tmp/brm-release-notes.md \
+            --verify-tag=false
+          NEW_SHA=$(gh release view brm-v1.0.1 --json assets -q '.assets[] | select(.name=="BRM_reproducibility_v1_v1.0.1.zip") | .digest' | sed 's/^sha256://')
+          test "$NEW_SHA" = "$ASSET_SHA"
+          echo "CLEAN_RELEASE_SHA=$NEW_SHA"
