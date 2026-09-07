@@ -7,39 +7,85 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: BRM_reproducibility_v1/requirements.txt
+
       - name: Install canonical package dependencies
         working-directory: BRM_reproducibility_v1
         run: pip install -r requirements.txt
-      - name: Compile canonical BRM scripts
-        working-directory: BRM_reproducibility_v1
-        run: python -m py_compile *.py
-      - name: Check canonical repository destinations
+
+      - name: Compile canonical and audited empirical scripts
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|brm-v1\.0\.1-candidate|tree/brm-methodological-expansion' \
-            README.md CHANGELOG.md BRM_reproducibility_v1 \
+          python -m py_compile BRM_reproducibility_v1/*.py
+          python -m py_compile mcphases_analyses.py actigraphy_replication.py ssf_estimators.py
+
+      - name: Check canonical repository destinations and terminology
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT=(README.md CHANGELOG.md BRM_reproducibility_v1)
+          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|brm-v1\.0\.1-candidate|tree/brm-methodological-expansion' "${CURRENT[@]}" \
+            --exclude='*.pyc' --exclude-dir='__pycache__'
+          ! grep -R -n -E 'tree/brm-v1\.0\.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1 \
+            --exclude='*.pyc' --exclude-dir='__pycache__'
+          ! grep -R -n -Ei 'preregistration_OSF|historical_analysis_plan|Registered Analysis Plan' README.md BRM_reproducibility_v1 \
             --exclude='*.pyc' --exclude-dir='__pycache__'
           grep -R -n 'https://osf.io/4u6dk/' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/.zenodo.json
-          grep -R -n 'releases/tag/brm-v1.0.1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/RELEASE_NOTES.md
-          grep -R -n 'tree/brm-v1.0.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/CITATION.cff
+          grep -R -n 'releases/tag/brm-v1.0.1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/CITATION.cff BRM_reproducibility_v1/RELEASE_NOTES.md
+          grep -R -n 'ICC(C,1)' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/RELEASE_NOTES.md
+
+      - name: Check audited empirical-code nomenclature
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -n 'effect_g' mcphases_analyses.py
+          ! grep -n 'BALANCED (confirmatory)' mcphases_analyses.py
+          ! grep -n 'surrogate_confirmatory_episode_aware.csv' mcphases_analyses.py
+          grep -n 'abs_d_equivalent' mcphases_analyses.py
+          grep -n 'BALANCED (main empirical)' mcphases_analyses.py
+
       - name: Check canonical metadata files exist
         shell: bash
         run: |
+          set -euo pipefail
           test -f BRM_reproducibility_v1/CITATION.cff
           test -f BRM_reproducibility_v1/.zenodo.json
           test -f BRM_reproducibility_v1/RELEASE_NOTES.md
           test -f BRM_reproducibility_v1/RELEASE_CHECKLIST.md
           test -f BRM_reproducibility_v1/seed_map.json
+          test -f BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt
+
+      - name: Verify published archival asset and numerical anchors
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _release_verify _release.zip
+          gh release download brm-v1.0.1 --pattern 'BRM_reproducibility_v1_v1.0.1.zip' --output _release.zip
+          EXPECTED=$(awk '{print $1}' BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt)
+          ACTUAL=$(sha256sum _release.zip | awk '{print $1}')
+          test "$EXPECTED" = "$ACTUAL"
+          mkdir _release_verify
+          unzip -q _release.zip -d _release_verify
+          python -m py_compile _release_verify/BRM_reproducibility_v1/*.py
+          python _release_verify/BRM_reproducibility_v1/validate_brm_outputs.py --root _release_verify/BRM_reproducibility_v1
+          (cd _release_verify/BRM_reproducibility_v1 && sha256sum -c SHA256SUMS.txt)
