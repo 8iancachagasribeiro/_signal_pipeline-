@@ -187,3 +187,5 @@ jobs:
             --title 'BRM Reproducibility Package v1.0.1' \
             --notes-file release-notes.md \
             --verify-tag=false
+
+# Retry after removing the final mutable branch-tree citation from results documentation.
