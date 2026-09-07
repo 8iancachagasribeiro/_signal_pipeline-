@@ -1,12 +1,15 @@
 # Release checklist for BRM v1.0.1
 
-1. Confirm `brm-v1.0.1` contains the final `BRM_reproducibility_v1/` code and corrected metadata.
-2. Verify the public OSF project URL used in the manuscript is https://osf.io/4u6dk/ and opens without authentication.
-3. Verify the published GitHub Release is https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1 and contains the validated archival ZIP.
-4. Verify the canonical source snapshot is https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1.
-5. Extract the release ZIP and run `python -m py_compile *.py`.
-6. Run `python validate_brm_outputs.py --root .` and confirm `VALIDATION PASS`.
-7. Run the package checksum validation and confirm all packaged files pass.
-8. Confirm `RELEASE_ASSET_SHA256.txt` matches the currently published release asset.
-9. Optionally deposit that exact ZIP in Zenodo. Add a Zenodo DOI to the manuscript only after the deposit is published and the DOI resolves publicly without authentication.
-10. Re-run the manuscript link, metadata, numerical-anchor, and rendering audit before resubmission.
+1. Confirm the published GitHub Release is https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1 and is neither a draft nor a prerelease.
+2. Confirm the validated archival asset is named `BRM_reproducibility_v1_v1.0.1.zip`.
+3. Confirm the release asset SHA-256 exactly matches `RELEASE_ASSET_SHA256.txt` and the checksum shown in the release description.
+4. Use the **release page and release tag**, not a mutable branch-tree URL, as the stable repository citation target.
+5. Verify the public OSF project URL used in the manuscript is https://osf.io/4u6dk/ and opens without authentication.
+6. Extract the release ZIP and run `python -m py_compile *.py`.
+7. Run `python validate_brm_outputs.py --root .` and confirm `VALIDATION PASS`.
+8. Run the package checksum validation and confirm all packaged files pass.
+9. Confirm the tagged repository source contains the audited empirical scripts `mcphases_analyses.py`, `actigraphy_replication.py`, and `ssf_estimators.py`; raw mcPHASES data must remain absent.
+10. Confirm manuscript terminology matches the implemented statistics: recovery fidelity for ordering, **ICC(C,1) consistency ICC** for cross-person consistency, and RMSE/bias for magnitude error.
+11. Confirm the manuscript contains no obsolete OSF/Zenodo destinations and makes no formal preregistration claim.
+12. Optionally deposit the exact release ZIP in Zenodo. Add a Zenodo DOI only after the deposit is published and independently accessible.
+13. Re-run manuscript link, metadata, numerical-anchor, accessibility, and visual-rendering audits immediately before resubmission.
