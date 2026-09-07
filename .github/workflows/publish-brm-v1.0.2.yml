@@ -132,3 +132,5 @@ jobs:
             --title 'BRM Reproducibility Package v1.0.2' \
             --notes-file release-notes.md \
             --verify-tag=false
+
+# Republish trigger after final empirical-label normalization.
