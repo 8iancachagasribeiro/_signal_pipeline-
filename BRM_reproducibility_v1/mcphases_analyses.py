@@ -32,8 +32,8 @@ ORDINAL = {
     "Moderate": 3, "High": 4, "Very High": 5,
 }
 CLASSIFICATION = {
-    "fatigue": "BALANCED (confirmatory)",
-    "moodswing": "BALANCED (confirmatory)",
+    "fatigue": "BALANCED (focal)",
+    "moodswing": "BALANCED (focal)",
     "cramps": "DIRECTIONAL",
     "bloating": "DIRECTIONAL",
     "sorebreasts": "DIRECTIONAL",
@@ -54,7 +54,8 @@ def corr0(a, b):
     return float(np.dot(ac, bc) / np.sqrt(np.dot(ac, ac) * np.dot(bc, bc)))
 
 
-def effect_g(r):
+def effect_d_equivalent(r):
+    """Correlation-derived Cohen's d-equivalent; no Hedges' g correction is applied."""
     r = float(np.clip(r, -0.99, 0.99))
     return abs(2 * r / np.sqrt(1 - r * r))
 
@@ -201,8 +202,8 @@ def differential_prediction(df):
                          participants=len(pr), intervals=len(rec),
                          participant_balanced_r=r_bal,
                          pooled_within_r=r_pool,
-                         g_participant_balanced=effect_g(r_bal),
-                         g_pooled=effect_g(r_pool)))
+                         d_equivalent_participant_balanced=effect_d_equivalent(r_bal),
+                         d_equivalent_pooled=effect_d_equivalent(r_pool)))
     return pd.DataFrame(rows)
 
 
@@ -296,12 +297,12 @@ def attenuation_sensitivity(df, ssf, rng, n_boot=2000):
             att = np.sqrt(rx * ry); boot = np.empty(n_boot)
             for b in range(n_boot):
                 rb = fisher_aggregate(vals[rng.integers(0, len(vals), len(vals))])
-                boot[b] = effect_g(np.clip(rb / att, -0.99, 0.99))
+                boot[b] = effect_d_equivalent(np.clip(rb / att, -0.99, 0.99))
             lo, hi = np.percentile(boot, [2.5, 97.5])
             rows.append(dict(item=item, f=f, ssf_predictor=sx, ssf_outcome=sy,
                              attenuation_sensitivity=att,
                              participant_balanced_r=r_obs,
-                             g_sensitivity=effect_g(np.clip(r_obs / att, -0.99, 0.99)),
+                             d_equivalent_sensitivity=effect_d_equivalent(np.clip(r_obs / att, -0.99, 0.99)),
                              ci95_low=lo, ci95_high=hi))
     return pd.DataFrame(rows)
 
@@ -359,7 +360,7 @@ def main():
     pd.DataFrame([
         surrogate_test(df, "fatigue", rng, a.surrogates),
         surrogate_test(df, "moodswing", rng, a.surrogates),
-    ]).to_csv(os.path.join(a.out_dir, "surrogate_confirmatory_episode_aware.csv"), index=False)
+    ]).to_csv(os.path.join(a.out_dir, "surrogate_focal_episode_aware.csv"), index=False)
     phase_locked(df).to_csv(os.path.join(a.out_dir, "phase_locked_episode_z.csv"), index=False)
     objective_surrogate(df, a.data_dir, rng, a.surrogates).to_csv(
         os.path.join(a.out_dir, "objective_surrogate_episode_aware.csv"), index=False)
