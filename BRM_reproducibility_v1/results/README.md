@@ -4,9 +4,7 @@ The compact summary tables required to inspect the principal BRM numerical ancho
 
 https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1
 
-The corresponding source snapshot is:
-
-https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
+The GitHub Release page and release tag are the stable citation targets for this submission. A branch-tree URL is intentionally not presented as a permanent source snapshot because branches are mutable.
 
 After extraction, validate with:
 
