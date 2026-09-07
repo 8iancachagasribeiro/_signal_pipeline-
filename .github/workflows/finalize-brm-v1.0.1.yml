@@ -1,0 +1,189 @@
+name: Finalize BRM v1.0.1 submission release
+
+on:
+  push:
+    branches:
+      - brm-v1.0.1
+    paths:
+      - .github/workflows/finalize-brm-v1.0.1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out canonical maintenance branch
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/brm-v1.0.1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: BRM_reproducibility_v1/requirements.txt
+
+      - name: Correct empirical-code nomenclature and archive legacy script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('mcphases_analyses.py')
+          s=p.read_text(encoding='utf-8')
+          replacements={
+              'BALANCED (confirmatory)':'BALANCED (main empirical)',
+              'effect_g':'abs_d_equivalent',
+              'g_participant_balanced':'abs_d_equivalent_participant_balanced',
+              'g_pooled':'abs_d_equivalent_pooled',
+              'g_sensitivity':'abs_d_equivalent_sensitivity',
+              'surrogate_confirmatory_episode_aware.csv':'surrogate_main_episode_aware.csv',
+          }
+          for a,b in replacements.items(): s=s.replace(a,b)
+          p.write_text(s,encoding='utf-8')
+
+          ch=Path('CHANGELOG.md')
+          c=ch.read_text(encoding='utf-8')
+          c=c.replace('Confirmatory heterogeneity remains null after correction:', 'Main empirical heterogeneity analyses remain null after correction:')
+          marker='# Changelog\n'
+          block='''\n## 2026-09-07 - final BRM pre-resubmission audit\n\n- Corrected the recovery ICC label to single-measure consistency ICC, ICC(C,1); RMSE and bias carry magnitude-error interpretation.\n- Removed mutable branch-tree URLs from canonical citation metadata; the GitHub Release page and tag are the stable repository targets.\n- Clarified that the archival release asset reproduces the complete simulation expansion, while the tagged repository source also contains the audited empirical mcPHASES and actigraphy scripts.\n- Documented that internal missing predictor days are interpolated only to construct the regular FFT grid and that surrogate values are evaluated only on originally observed days.\n- Replaced prospective-sounding empirical labels such as `confirmatory` with `main empirical` in the active empirical script; historical audit provenance remains dated and explicit.\n- Rebuilt and revalidated the release asset without changing the canonical numerical outputs.\n'''
+          if '## 2026-09-07 - final BRM pre-resubmission audit' not in c:
+              c=c.replace(marker,marker+block,1)
+          ch.write_text(c,encoding='utf-8')
+
+          ar=Path('audit_results/2026-08-24/README.md')
+          if ar.exists():
+              t=ar.read_text(encoding='utf-8')
+              t=t.replace('## Confirmatory surrogate results','## Main empirical surrogate results')
+              t=t.replace('The confirmatory conclusion remains null:', 'The main empirical conclusion remains null:')
+              ar.write_text(t,encoding='utf-8')
+          PY
+
+          if test -f registered_test_power.py; then
+            mv registered_test_power.py archive/registered_test_power.py
+          fi
+          if test -f audit_results/2026-08-24/surrogate_confirmatory_episode_aware.csv; then
+            mv audit_results/2026-08-24/surrogate_confirmatory_episode_aware.csv audit_results/2026-08-24/surrogate_main_episode_aware.csv
+          fi
+
+      - name: Static audit before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile BRM_reproducibility_v1/*.py
+          python -m py_compile mcphases_analyses.py actigraphy_replication.py ssf_estimators.py
+          ! grep -n 'effect_g' mcphases_analyses.py
+          ! grep -n 'BALANCED (confirmatory)' mcphases_analyses.py
+          ! grep -n 'surrogate_confirmatory_episode_aware.csv' mcphases_analyses.py
+          grep -n 'abs_d_equivalent' mcphases_analyses.py
+          grep -n 'BALANCED (main empirical)' mcphases_analyses.py
+          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|tree/brm-v1\.0\.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1 \
+            --exclude='*.pyc' --exclude-dir='__pycache__'
+
+      - name: Rebuild validated archival asset from current package metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf stage verify current.zip BRM_reproducibility_v1_v1.0.1.zip
+          mkdir -p stage
+          gh release download brm-v1.0.1 --pattern 'BRM_reproducibility_v1_v1.0.1.zip' --output current.zip
+          unzip -q current.zip -d stage
+
+          rsync -a BRM_reproducibility_v1/ stage/BRM_reproducibility_v1/ \
+            --exclude RELEASE_ASSET_SHA256.txt \
+            --exclude results/
+
+          python -m pip install -r stage/BRM_reproducibility_v1/requirements.txt
+          python -m py_compile stage/BRM_reproducibility_v1/*.py
+          python stage/BRM_reproducibility_v1/validate_brm_outputs.py --root stage/BRM_reproducibility_v1
+
+          (
+            cd stage/BRM_reproducibility_v1
+            rm -f SHA256SUMS.txt
+            find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+            sha256sum -c SHA256SUMS.txt
+          )
+
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root=Path('stage/BRM_reproducibility_v1')
+          out=Path('BRM_reproducibility_v1_v1.0.1.zip')
+          stamp=(2026,9,7,0,0,0)
+          with zipfile.ZipFile(out,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as zf:
+              info=zipfile.ZipInfo('BRM_reproducibility_v1/',stamp)
+              info.external_attr=(0o40755<<16)|0x10
+              zf.writestr(info,b'')
+              for p in sorted(root.rglob('*'),key=lambda x:x.as_posix()):
+                  arc='BRM_reproducibility_v1/'+p.relative_to(root).as_posix()
+                  if p.is_dir():
+                      info=zipfile.ZipInfo(arc.rstrip('/')+'/',stamp)
+                      info.external_attr=(0o40755<<16)|0x10
+                      zf.writestr(info,b'')
+                  else:
+                      info=zipfile.ZipInfo(arc,stamp)
+                      mode=0o755 if p.suffix=='.py' else 0o644
+                      info.external_attr=(0o100000|mode)<<16
+                      zf.writestr(info,p.read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+          PY
+
+          unzip -t BRM_reproducibility_v1_v1.0.1.zip
+          mkdir verify
+          unzip -q BRM_reproducibility_v1_v1.0.1.zip -d verify
+          python verify/BRM_reproducibility_v1/validate_brm_outputs.py --root verify/BRM_reproducibility_v1
+          (cd verify/BRM_reproducibility_v1 && sha256sum -c SHA256SUMS.txt)
+
+          SHA=$(sha256sum BRM_reproducibility_v1_v1.0.1.zip | awk '{print $1}')
+          echo "ASSET_SHA=$SHA" >> "$GITHUB_ENV"
+          printf '%s  %s\n' "$SHA" 'BRM_reproducibility_v1_v1.0.1.zip' > BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt
+
+      - name: Commit final audited source and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/finalize-brm-v1.0.1.yml
+          git add -A
+          git commit -m 'Finalize BRM v1.0.1 pre-resubmission audit'
+          git push origin HEAD:refs/heads/brm-v1.0.1
+          echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Replace published release with final audited snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Reproducibility snapshot for *From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research*.
+
+          This v1.0.1 release is the submission-aligned record after the final BRM pre-resubmission audit.
+
+          The archival asset contains the complete validated simulation expansion: a 400-cell robustness grid with 1,000 Monte Carlo replications per cell; a 384-cell sampling-design grid with 1,000 replications per cell; an SSF benchmark across 72 simulation cells and eight estimator variants; phase-randomized surrogate calibration and power analyses; deterministic seed maps; canonical result CSVs; six figures; and validation utilities.
+
+          The tagged repository source additionally contains the audited empirical mcPHASES and independent-actigraphy analysis scripts. Raw mcPHASES participant data are not redistributed because PhysioNet access is credentialed.
+
+          Public OSF project: https://osf.io/4u6dk/
+
+          Statistical note: the complementary recovery ICC is a single-measure consistency ICC, ICC(C,1), not an absolute-agreement ICC. RMSE and bias quantify magnitude error.
+
+          Release asset: BRM_reproducibility_v1_v1.0.1.zip
+
+          SHA-256: ${ASSET_SHA}
+          EOF
+
+          gh release delete brm-v1.0.1 --cleanup-tag --yes
+          gh release create brm-v1.0.1 \
+            BRM_reproducibility_v1_v1.0.1.zip \
+            --target "$RELEASE_TARGET" \
+            --title 'BRM Reproducibility Package v1.0.1' \
+            --notes-file release-notes.md \
+            --verify-tag=false
