@@ -7,14 +7,17 @@ Repository companion for **From Group Nulls to Person-Specific Recovery: Statist
 - Public OSF project: https://osf.io/4u6dk/
 - Repository: https://github.com/8iancachagasribeiro/_signal_pipeline-
 - Published GitHub Release: https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1
-- Canonical v1.0.1 source snapshot: https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
 - Permanent Zenodo DOI: not assigned for v1.0.1
 
-The OSF project provides project-level study materials and transparency information. The executable reproducibility record for the current BRM submission is the versioned GitHub Release and source snapshot above.
+The **GitHub Release page and its tag** are the canonical citation targets for this submission. A branch-tree URL is intentionally not used as a permanent source citation because branches are mutable.
+
+The OSF project provides project-level study materials and transparency information. The executable reproducibility record for the current BRM submission is the versioned GitHub Release.
 
 ## Distribution model
 
-This folder contains the executable BRM expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The published v1.0.1 GitHub Release contains the complete validated archival ZIP, including full canonical outputs and figures. The release checksum is recorded in `RELEASE_ASSET_SHA256.txt`.
+This folder contains the executable BRM simulation expansion code, metadata, compact manuscript tables, seeds, environment information, and validation utilities. The published v1.0.1 GitHub Release contains the complete validated archival ZIP, including full canonical outputs and figures. The release checksum is recorded in `RELEASE_ASSET_SHA256.txt`.
+
+The **tagged repository source** additionally contains the audited empirical scripts `mcphases_analyses.py`, `actigraphy_replication.py`, and `ssf_estimators.py`. Those scripts require the original source archives; restricted mcPHASES participant data are not included in the archival ZIP or repository.
 
 ## Canonical analyses
 
@@ -42,6 +45,8 @@ Raw mcPHASES data are not redistributed because access is credentialed through P
 ## Scientific boundaries
 
 - Recovery fidelity measures preservation of individual ordering, not absolute magnitude agreement.
+- The ICC implemented by `rep_metrics()` is a **single-measure consistency ICC, ICC(C,1)**. It should not be described as an absolute-agreement ICC.
+- RMSE and mean bias quantify magnitude error and systematic scale/location error.
 - SSF is a smooth-signal availability diagnostic, not classical reliability.
 - The phase-randomized surrogate test detects excess coupling dispersion relative to the implemented temporal null and is not a universal random-slope variance-component test under arbitrary homogeneous nonzero effects.
 - The Haar comparator is the specified implementation included here, not the full wavelet-method family.
