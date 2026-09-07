@@ -3,17 +3,15 @@
 
 This repository supports the manuscript **From Group Nulls to Person-Specific Recovery: Statistical Cancellation, Signal Availability, and Design in Intensive Longitudinal Research**.
 
-## Canonical BRM reproduction package
+## Canonical BRM release
 
-The corrected submission-aligned GitHub Release for the current BRM manuscript is:
+The submission-aligned archival release is:
 
-https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.1
+https://github.com/8iancachagasribeiro/_signal_pipeline-/releases/tag/brm-v1.0.2
 
-The corresponding source snapshot is located in `BRM_reproducibility_v1/` on branch `brm-v1.0.1`:
+Release asset: `BRM_reproducibility_v1_v1.0.2.zip`
 
-https://github.com/8iancachagasribeiro/_signal_pipeline-/tree/brm-v1.0.1/BRM_reproducibility_v1
-
-These versioned materials, rather than older root-level development scripts or files under `archive/`, are the canonical source for the BRM methodological expansion.
+The release asset, rather than mutable development files elsewhere in the repository, is the canonical computational record for the current BRM submission. Its SHA-256 is recorded in `BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt` and in the GitHub Release metadata.
 
 The canonical package contains:
 
@@ -21,20 +19,19 @@ The canonical package contains:
 - a 384-cell sampling-design grid with 1,000 Monte Carlo replications per cell;
 - an SSF benchmark based on 72 simulation cells and eight estimator variants, yielding 576 method-by-condition rows;
 - a 31-cell phase-randomized surrogate calibration/power study with 1,000 Monte Carlo replications and 199 surrogates per test;
+- audited mcPHASES and actigraphy analysis scripts for reproduction from the original source archives;
+- derived non-identifying empirical audit outputs used to verify manuscript anchors;
 - deterministic seed maps, environment information, summary tables, six manuscript figures, and validation utilities.
 
-Release asset: `BRM_reproducibility_v1_v1.0.1.zip`
-
-The current release checksum is recorded in `BRM_reproducibility_v1/RELEASE_ASSET_SHA256.txt`.
-
-Run the package validator after extraction with:
+After extracting the release asset:
 
 ```bash
 cd BRM_reproducibility_v1
+python -m py_compile *.py
 python validate_brm_outputs.py --root .
+python validate_empirical_audit.py --root .
+sha256sum -c SHA256SUMS.txt
 ```
-
-The validator checks the canonical row counts, replication counts, and key manuscript numerical anchors.
 
 ## OSF project and transparency
 
@@ -42,7 +39,7 @@ The public OSF project associated with the study is:
 
 https://osf.io/4u6dk/
 
-The OSF project provides project-level study materials and transparency information. The canonical executable reproducibility materials are the versioned GitHub Release and source snapshot linked above.
+The OSF project provides project-level study materials and transparency information. It is not described here as a formal preregistration.
 
 ## Effect-size notation
 
@@ -52,14 +49,18 @@ Correlations are converted for descriptive comparability using:
 
 The manuscript denotes these standardized values as **Cohen's d-equivalent effects**. No Hedges' g small-sample correction is applied.
 
+## Recovery metrics
+
+Recovery fidelity is a correlation-based ordering metric. The package also reports RMSE, mean bias, directional accuracy, and a single-measure consistency ICC, `ICC(C,1)`. The ICC is not an absolute-agreement coefficient; magnitude recovery is evaluated jointly with RMSE and bias.
+
 ## SSF is not reliability
 
 The smooth-signal fraction (SSF) is a diagnostic of temporally structured signal availability at the target timescale. It is not classical reliability and does not by itself identify whether high-frequency variation is measurement error or genuine rapid biological variation.
 
 ## Data access
 
-Raw mcPHASES data are not redistributed because PhysioNet access is credentialed. Independent actigraphy datasets remain available from their original repositories. See `BRM_reproducibility_v1/README_DATA.md` for the source records.
+Raw mcPHASES data are not redistributed because PhysioNet access is credentialed. Independent actigraphy datasets remain available from their original repositories. See `BRM_reproducibility_v1/README_DATA.md` and `BRM_reproducibility_v1/EMPIRICAL_REPRODUCIBILITY.md`.
 
 ## Versioning
 
-GitHub Release `brm-v1.0.1` is the corrected submission-aligned archival snapshot produced after the BRM link and metadata audit. The historical `brm-v1.0.0` release is superseded for submission purposes because its metadata contained obsolete repository destinations. A permanent Zenodo DOI should be added only after a matching v1.0.1 archival deposit is published and independently accessible.
+GitHub Release `brm-v1.0.2` supersedes `brm-v1.0.1` for the BRM resubmission. Version 1.0.2 hardens empirical-code inclusion, terminology, validation, and archival citation while preserving the validated canonical numerical outputs. A Zenodo DOI should be cited only after an exact matching deposit is publicly available.

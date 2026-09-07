@@ -1,9 +1,9 @@
-name: BRM v1.0.1 package audit
+name: BRM v1.0.2 package audit
 
 on:
   push:
     branches:
-      - brm-v1.0.1
+      - brm-v1.0.2
   pull_request:
     branches:
       - main
@@ -29,12 +29,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|brm-v1\.0\.1-candidate|tree/brm-methodological-expansion' \
-            README.md CHANGELOG.md BRM_reproducibility_v1 \
+          ! grep -R -n -E 'osf\.io/ewyp7|zenodo\.22224443|brm-v1\.0\.1-candidate|tree/brm-methodological-expansion|releases/tag/brm-v1\.0\.0' \
+            README.md BRM_reproducibility_v1 \
             --exclude='*.pyc' --exclude-dir='__pycache__'
           grep -R -n 'https://osf.io/4u6dk/' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/.zenodo.json
-          grep -R -n 'releases/tag/brm-v1.0.1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/RELEASE_NOTES.md
-          grep -R -n 'tree/brm-v1.0.1/BRM_reproducibility_v1' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/CITATION.cff
+          grep -R -n 'releases/tag/brm-v1.0.2' README.md BRM_reproducibility_v1/README.md BRM_reproducibility_v1/RELEASE_NOTES.md BRM_reproducibility_v1/CITATION.cff
+      - name: Check empirical reproducibility materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f BRM_reproducibility_v1/mcphases_analyses.py
+          test -f BRM_reproducibility_v1/actigraphy_replication.py
+          test -f BRM_reproducibility_v1/ssf_estimators.py
+          test -f BRM_reproducibility_v1/EMPIRICAL_REPRODUCIBILITY.md
+          test -f BRM_reproducibility_v1/validate_empirical_audit.py
+          test -f BRM_reproducibility_v1/make_empirical_figure.py
+          test -f BRM_reproducibility_v1/empirical_audit/surrogate_focal_episode_aware.csv
+          python BRM_reproducibility_v1/validate_empirical_audit.py --root BRM_reproducibility_v1
       - name: Check canonical metadata files exist
         shell: bash
         run: |
