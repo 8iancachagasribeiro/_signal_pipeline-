@@ -10,14 +10,14 @@ This directory records the empirical re-run performed from the original credenti
 - Daily Fitbit files are collapsed to one participant-interval-day before joining with E3G. Resting-heart-rate values <= 0 are treated as missing.
 - The smooth-signal fraction (SSF) is not treated as classical reliability. Attenuation based on SSF is retained only as an identification sensitivity analysis.
 
-## Confirmatory surrogate results
+## Main empirical surrogate results
 
 | Outcome | N participants | SD observed r_i | Null median | p |
 |---|---:|---:|---:|---:|
 | Fatigue | 41 | 0.1387 | 0.1395 | 0.5329 |
 | Mood swing | 41 | 0.1301 | 0.1468 | 0.8802 |
 
-The confirmatory conclusion remains null: neither fatigue nor mood swing shows excess between-person heterogeneity beyond the calendar-preserving phase-randomized null.
+The main empirical conclusion remains null: neither fatigue nor mood swing shows excess between-person heterogeneity beyond the calendar-preserving phase-randomized null.
 
 ## Exploratory objective outcomes
 

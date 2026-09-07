@@ -1,0 +1,10 @@
+BRM methodological expansion execution environment
+Python==3.13.5
+numpy==2.3.5
+scipy==1.17.0
+pandas==2.2.3
+matplotlib==3.10.8
+statsmodels==0.14.6
+Platform: Linux 6.18.35 x86_64, glibc 2.41
+
+Note: The wavelet comparator is an explicit NumPy implementation of orthonormal Haar soft-threshold denoising. PyWavelets was not available in the offline execution environment, so no claim is made that the benchmark represents the full PyWavelets method family.

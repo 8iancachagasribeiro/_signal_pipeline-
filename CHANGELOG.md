@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-07 - final BRM pre-resubmission audit
+
+- Corrected the recovery ICC label to single-measure consistency ICC, ICC(C,1); RMSE and bias carry magnitude-error interpretation.
+- Removed mutable branch-tree URLs from canonical citation metadata; the GitHub Release page and tag are the stable repository targets.
+- Clarified that the archival release asset reproduces the complete simulation expansion, while the tagged repository source also contains the audited empirical mcPHASES and actigraphy scripts.
+- Documented that internal missing predictor days are interpolated only to construct the regular FFT grid and that surrogate values are evaluated only on originally observed days.
+- Replaced prospective-sounding empirical labels such as `confirmatory` with `main empirical` in the active empirical script; historical audit provenance remains dated and explicit.
+- Rebuilt and revalidated the release asset without changing the canonical numerical outputs.
+
 ## 2026-09-05 - BRM resubmission audit and canonical-package correction
 
 ### Current canonical BRM state
@@ -39,7 +48,7 @@ The 2026-08-24 audit below documents an earlier development state. References th
 - Repeated intervals are Fisher-z aggregated back to one participant-level coupling estimate, so intervals are not treated as independent participants.
 - Pooled within-person summaries are centered within participant-interval.
 - Fitbit files described as daily are collapsed to one participant-interval-day before joining to hormone data. Resting-heart-rate values <=0 are treated as missing.
-- Confirmatory heterogeneity remains null after correction: fatigue p=.5329; mood swing p=.8802.
+- Main empirical heterogeneity analyses remain null after correction: fatigue p=.5329; mood swing p=.8802.
 - The previously reported exploratory skin-temperature result was reproduced as a legacy raw duplicate-merge artifact (p approximately .024) and disappears after daily de-duplication plus episode-aware analysis (p=.8743). Resting heart rate is also null (p=.1557).
 - Corrected participant-balanced spectral SSF estimates are E3G=.4271, fatigue=.3618, mood swing=.3783, cramps=.5724, and bloating=.3491. Objective SSF now travels with eligible-participant counts because strict regular-grid gap handling changes the estimand materially.
 - Cramping remains the strongest phase-locked result after within-interval standardization: |r| with E3G level=.0782, phase eta-squared=.1744, menstrual mean=+0.836 within-interval SD.

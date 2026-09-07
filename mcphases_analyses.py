@@ -32,8 +32,8 @@ ORDINAL = {
     "Moderate": 3, "High": 4, "Very High": 5,
 }
 CLASSIFICATION = {
-    "fatigue": "BALANCED (confirmatory)",
-    "moodswing": "BALANCED (confirmatory)",
+    "fatigue": "BALANCED (main empirical)",
+    "moodswing": "BALANCED (main empirical)",
     "cramps": "DIRECTIONAL",
     "bloating": "DIRECTIONAL",
     "sorebreasts": "DIRECTIONAL",
@@ -54,7 +54,7 @@ def corr0(a, b):
     return float(np.dot(ac, bc) / np.sqrt(np.dot(ac, ac) * np.dot(bc, bc)))
 
 
-def effect_g(r):
+def abs_d_equivalent(r):
     r = float(np.clip(r, -0.99, 0.99))
     return abs(2 * r / np.sqrt(1 - r * r))
 
@@ -201,8 +201,8 @@ def differential_prediction(df):
                          participants=len(pr), intervals=len(rec),
                          participant_balanced_r=r_bal,
                          pooled_within_r=r_pool,
-                         g_participant_balanced=effect_g(r_bal),
-                         g_pooled=effect_g(r_pool)))
+                         abs_d_equivalent_participant_balanced=abs_d_equivalent(r_bal),
+                         abs_d_equivalent_pooled=abs_d_equivalent(r_pool)))
     return pd.DataFrame(rows)
 
 
@@ -296,12 +296,12 @@ def attenuation_sensitivity(df, ssf, rng, n_boot=2000):
             att = np.sqrt(rx * ry); boot = np.empty(n_boot)
             for b in range(n_boot):
                 rb = fisher_aggregate(vals[rng.integers(0, len(vals), len(vals))])
-                boot[b] = effect_g(np.clip(rb / att, -0.99, 0.99))
+                boot[b] = abs_d_equivalent(np.clip(rb / att, -0.99, 0.99))
             lo, hi = np.percentile(boot, [2.5, 97.5])
             rows.append(dict(item=item, f=f, ssf_predictor=sx, ssf_outcome=sy,
                              attenuation_sensitivity=att,
                              participant_balanced_r=r_obs,
-                             g_sensitivity=effect_g(np.clip(r_obs / att, -0.99, 0.99)),
+                             abs_d_equivalent_sensitivity=abs_d_equivalent(np.clip(r_obs / att, -0.99, 0.99)),
                              ci95_low=lo, ci95_high=hi))
     return pd.DataFrame(rows)
 
@@ -359,7 +359,7 @@ def main():
     pd.DataFrame([
         surrogate_test(df, "fatigue", rng, a.surrogates),
         surrogate_test(df, "moodswing", rng, a.surrogates),
-    ]).to_csv(os.path.join(a.out_dir, "surrogate_confirmatory_episode_aware.csv"), index=False)
+    ]).to_csv(os.path.join(a.out_dir, "surrogate_main_episode_aware.csv"), index=False)
     phase_locked(df).to_csv(os.path.join(a.out_dir, "phase_locked_episode_z.csv"), index=False)
     objective_surrogate(df, a.data_dir, rng, a.surrogates).to_csv(
         os.path.join(a.out_dir, "objective_surrogate_episode_aware.csv"), index=False)
